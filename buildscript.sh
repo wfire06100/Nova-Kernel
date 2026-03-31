@@ -275,7 +275,7 @@ apply_hook() {
     case "$HOOK_TYPE" in
 
         scope-min-1.6)
-            local PATCH_URL="https://raw.githubusercontent.com/OmarAlsmehan/Random-stuff/refs/heads/main/scope-min-manual-hook.1.6-5.4.patch"
+            local PATCH_URL="https://raw.githubusercontent.com/OmarAlsmehan/Random-stuff/e2dca691b866415c8ec59f306536f59c633be8e7/scope-min-manual-hook.1.6-5.4.patch"
             local PATCH_FILE="$TC_DIR/scope-min-1.6.patch"
 
             if grep -q "ksu_handle_execveat" "$SRC_DIR/fs/exec.c" 2>/dev/null; then
