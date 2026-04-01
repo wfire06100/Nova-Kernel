@@ -8,9 +8,45 @@ set -o pipefail
 #  Devices: A73 (a73xq) | A52S (a52sxq) | M52 (m52xq)
 # ════════════════════════════════════════════════════════════════
 
+# ─────────────────────────────────────────────────────────────────
+#  § 1 — CONFIGURATION & GLOBAL VARIABLES
+# ─────────────────────────────────────────────────────────────────
+
+# --- Base System Paths ---
+SRC_DIR="$(pwd)"
+OUT_DIR="$SRC_DIR/out"
+TC_DIR="$HOME/toolchains"
+CLANGVER="clang-r563880c"
+CLANG_PREBUILT_BIN="$TC_DIR/$CLANGVER/bin/"
+
+# --- Toolchain & Assets URLs ---
+URL_CLANG="https://github.com/OmarAlsmehan/Android-tools/releases/download/clang-r563880c-1/clang-r563880c.tar.gz"
+URL_MAGISK_API="https://api.github.com/repos/topjohnwu/Magisk/releases"
+URL_AVBTOOL="https://android.googlesource.com/platform/external/avb/+/refs/heads/main/avbtool.py?format=TEXT"
+URL_BANNER="https://raw.githubusercontent.com/OmarAlsmehan/AnyKernel3/refs/heads/master/banner"
+
+# --- KernelSU URLs ---
+URL_KSU_SETUP="https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh"
+URL_KSU_DEFAULT_REPO="https://github.com/OmarAlsmehan/KernelSU-Next.git"
+
+# --- Patches & Scripts URLs ---
+declare -A URL_HOOKS=(
+    ["scope-min-1.6"]="https://raw.githubusercontent.com/OmarAlsmehan/Random-stuff/e2dca691b866415c8ec59f306536f59c633be8e7/scope-min-manual-hook.1.6-5.4.patch"
+    ["rksu"]="https://raw.githubusercontent.com/rksuorg/kernel_patches/refs/heads/master/manual_hook/kernel-4.19_5.4.patch"
+    ["syscall"]="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/syscall_hook_patches.sh"
+    ["inline"]="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/susfs_inline_hook_patches.sh"
+)
+URL_BACKPORT="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/backport_patches.sh"
+
+# --- Stock Images URLs ---
+declare -A URL_STOCK_IMAGES=(
+    ["A73"]="https://github.com/nicodotgit/proprietary_vendor_samsung_a73xq/releases/download/A736BXXSAGZA1_ODM/A736BXXSAGZA1_kernel.tar"
+    ["A52S"]="https://github.com/RisenID/proprietary_vendor_samsung_a52sxq/releases/download/A528BXXUAGXK8_BTU/A528BXXUAGXK8_kernel.tar"
+    ["M52"]="https://github.com/nicodotgit/proprietary_vendor_samsung_m52xq/releases/download/M526BXXS7CYE1_CAU/M526BXXS7CYE1_kernel.tar"
+)
 
 # ─────────────────────────────────────────────────────────────────
-#  § 1 — CONSTANTS & STYLES
+#  § 2 — CONSTANTS & STYLES
 # ─────────────────────────────────────────────────────────────────
 
 BOLD="\e[1m";  RESET="\e[0m";  DIM="\e[2m"
@@ -19,12 +55,10 @@ RED="\e[1;31m"
 
 IN_GHA="${GITHUB_ACTIONS:-false}"
 
-
 # ─────────────────────────────────────────────────────────────────
-#  § 2 — LOGGING
+#  § 3 — LOGGING
 # ─────────────────────────────────────────────────────────────────
 
-# Usage: log_group_start "emoji" "Label"
 log_group_start() {
     if [[ "$IN_GHA" == "true" ]]; then
         echo "::group::$1  $2"
@@ -48,9 +82,8 @@ log_sep()       { echo -e "${DIM}  ───────────────
 elapsed()       { date -u -d @$(( $(date +%s) - $1 )) +'%-Mm %-Ss'; }
 ts()            { date '+%H:%M:%S'; }
 
-
 # ─────────────────────────────────────────────────────────────────
-#  § 3 — CORE UTILITIES
+#  § 4 — CORE UTILITIES
 # ─────────────────────────────────────────────────────────────────
 
 check_dependencies() {
@@ -70,19 +103,13 @@ check_dependencies() {
 }
 
 init_vars() {
-    SRC_DIR="$(pwd)"
-    OUT_DIR="$SRC_DIR/out"
-    TC_DIR="$HOME/toolchains"
     JOBS=$(nproc)
-    CLANGVER="clang-r563880c"
-    CLANG_PREBUILT_BIN="$TC_DIR/$CLANGVER/bin/"
     export SRC_DIR OUT_DIR TC_DIR JOBS CLANGVER CLANG_PREBUILT_BIN
     export PATH="$TC_DIR:$CLANG_PREBUILT_BIN:$PATH"
 }
 
-
 # ─────────────────────────────────────────────────────────────────
-#  § 4 — INTERACTIVE PROMPTS  (local builds only)
+#  § 5 — INTERACTIVE PROMPTS  (local builds only)
 # ─────────────────────────────────────────────────────────────────
 
 prompt_variant() {
@@ -174,12 +201,11 @@ prompt_backport() {
     esac
 }
 
-
 # ─────────────────────────────────────────────────────────────────
-#  § 5 — BUILD PHASES
+#  § 6 — BUILD PHASES
 # ─────────────────────────────────────────────────────────────────
 
-# ── 5.1  Toolchain & assets ──────────────────────────────────────
+# ── 6.1  Toolchain & assets ──────────────────────────────────────
 fetch_tools() {
     log_group_start "🧰" "Toolchain & Assets"
     mkdir -p "$TC_DIR"
@@ -187,8 +213,7 @@ fetch_tools() {
     if [[ ! -d "$CLANG_PREBUILT_BIN" ]]; then
         log_step "Downloading Clang ($CLANGVER)..."
         mkdir -p "$TC_DIR/$CLANGVER"
-        local url="https://github.com/OmarAlsmehan/Android-tools/releases/download/clang-r563880c-1/clang-r563880c.tar.gz"
-        wget --progress=bar:force:noscroll "$url" -P "$TC_DIR"
+        wget --progress=bar:force:noscroll "$URL_CLANG" -P "$TC_DIR"
         tar xf "$TC_DIR/$CLANGVER.tar.gz" -C "$TC_DIR/$CLANGVER"
         rm "$TC_DIR/$CLANGVER.tar.gz"
         log_ok "Clang ready"
@@ -200,7 +225,7 @@ fetch_tools() {
         log_step "Fetching magiskboot..."
         local apk_url
         apk_url="$(curl -s ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
-            "https://api.github.com/repos/topjohnwu/Magisk/releases" \
+            "$URL_MAGISK_API" \
             | grep -oE 'https://[^"]+\.apk' | grep 'Magisk[-.]v' | head -n1)"
         wget -q --show-progress "$apk_url" -O "$TC_DIR/magisk.apk"
         unzip -p "$TC_DIR/magisk.apk" "lib/x86_64/libmagiskboot.so" > "$TC_DIR/magiskboot"
@@ -213,8 +238,7 @@ fetch_tools() {
 
     if [[ ! -f "$TC_DIR/avbtool" ]]; then
         log_step "Fetching avbtool..."
-        curl -s "https://android.googlesource.com/platform/external/avb/+/refs/heads/main/avbtool.py?format=TEXT" \
-            | base64 --decode > "$TC_DIR/avbtool"
+        curl -s "$URL_AVBTOOL" | base64 --decode > "$TC_DIR/avbtool"
         chmod +x "$TC_DIR/avbtool"
         log_ok "avbtool ready"
     else
@@ -224,15 +248,10 @@ fetch_tools() {
     if [[ ! -d "$TC_DIR/images" ]]; then
         log_step "Downloading stock kernel images..."
         mkdir -p "$TC_DIR/images"
-        declare -A image_urls=(
-            ["A73"]="https://github.com/nicodotgit/proprietary_vendor_samsung_a73xq/releases/download/A736BXXSAGZA1_ODM/A736BXXSAGZA1_kernel.tar"
-            ["A52S"]="https://github.com/RisenID/proprietary_vendor_samsung_a52sxq/releases/download/A528BXXUAGXK8_BTU/A528BXXUAGXK8_kernel.tar"
-            ["M52"]="https://github.com/nicodotgit/proprietary_vendor_samsung_m52xq/releases/download/M526BXXS7CYE1_CAU/M526BXXS7CYE1_kernel.tar"
-        )
-        for name in "${!image_urls[@]}"; do
+        for name in "${!URL_STOCK_IMAGES[@]}"; do
             log_step "→ Downloading $name image..."
             mkdir -p "$TC_DIR/images/$name"
-            wget -qO- "${image_urls[$name]}" | tar xf - -C "$TC_DIR/images/$name"
+            wget -qO- "${URL_STOCK_IMAGES[$name]}" | tar xf - -C "$TC_DIR/images/$name"
             lz4 -dm --rm "$TC_DIR/images/$name/"*
             log_ok "$name image ready"
         done
@@ -243,15 +262,15 @@ fetch_tools() {
     log_group_end
 }
 
-# ── 5.2  KernelSU setup ──────────────────────────────────────────
+# ── 6.2  KernelSU setup ──────────────────────────────────────────
 setup_kernelsu() {
     log_group_start "⚡" "KernelSU Setup"
 
     log_step "Running tiann/KernelSU setup..."
-    curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+    curl -LSs "$URL_KSU_SETUP" | bash -
     rm -rf KernelSU
 
-    local KSU_REPO="${NK_KSU_REPO:-https://github.com/OmarAlsmehan/KernelSU-Next.git}"
+    local KSU_REPO="${NK_KSU_REPO:-$URL_KSU_DEFAULT_REPO}"
     local KSU_BRANCH_USE="${KSU_BRANCH:-legacy}"
     log_step "Cloning KernelSU-Next (${KSU_BRANCH_USE})..."
     log_info "Repo:   $KSU_REPO"
@@ -262,7 +281,7 @@ setup_kernelsu() {
     log_group_end
 }
 
-# ── 5.3  Hook patches ────────────────────────────────────────────
+# ── 6.3  Hook patches ────────────────────────────────────────────
 apply_hook() {
     if [[ "$HOOK_TYPE" == "kprobes" ]]; then
         log_ok "Hook type: kprobes — handled by KernelSU, no patches needed"
@@ -273,66 +292,30 @@ apply_hook() {
     local T0=$(date +%s)
 
     case "$HOOK_TYPE" in
-
-        scope-min-1.6)
-            local PATCH_URL="https://raw.githubusercontent.com/OmarAlsmehan/Random-stuff/e2dca691b866415c8ec59f306536f59c633be8e7/scope-min-manual-hook.1.6-5.4.patch"
-            local PATCH_FILE="$TC_DIR/scope-min-1.6.patch"
-
+        scope-min-1.6|rksu)
+            local PATCH_FILE="$TC_DIR/${HOOK_TYPE}.patch"
             if grep -q "ksu_handle_execveat" "$SRC_DIR/fs/exec.c" 2>/dev/null; then
-                log_warn "scope-min-1.6 hook already applied — skipping"
+                log_warn "$HOOK_TYPE hook already applied — skipping"
             else
-                log_step "Downloading scope-min-1.6 patch..."
-                wget -q "$PATCH_URL" -O "$PATCH_FILE"
+                log_step "Downloading $HOOK_TYPE patch..."
+                wget -q "${URL_HOOKS[$HOOK_TYPE]}" -O "$PATCH_FILE"
                 log_step "Applying patch..."
                 patch -p1 -d "$SRC_DIR" < "$PATCH_FILE"
-                log_ok "scope-min-1.6 hook applied"
+                log_ok "$HOOK_TYPE hook applied"
             fi
             ;;
 
-        rksu)
-            local PATCH_URL="https://raw.githubusercontent.com/rksuorg/kernel_patches/refs/heads/master/manual_hook/kernel-4.19_5.4.patch"
-            local PATCH_FILE="$TC_DIR/rksu-manual-hook.patch"
-
+        syscall|inline)
+            local SCRIPT_FILE="$TC_DIR/${HOOK_TYPE}_patches.sh"
             if grep -q "ksu_handle_execveat" "$SRC_DIR/fs/exec.c" 2>/dev/null; then
-                log_warn "RKSU hook already applied — skipping"
+                log_warn "$HOOK_TYPE hook already applied — skipping"
             else
-                log_step "Downloading RKSU hook patch..."
-                wget -q "$PATCH_URL" -O "$PATCH_FILE"
-                log_step "Applying patch..."
-                patch -p1 -d "$SRC_DIR" < "$PATCH_FILE"
-                log_ok "RKSU hook applied"
-            fi
-            ;;
-
-        syscall)
-            local SCRIPT_URL="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/syscall_hook_patches.sh"
-            local SCRIPT_FILE="$TC_DIR/syscall_hook_patches.sh"
-
-            if grep -q "ksu_handle_execveat" "$SRC_DIR/fs/exec.c" 2>/dev/null; then
-                log_warn "Syscall hook already applied — skipping"
-            else
-                log_step "Downloading syscall hook script..."
-                wget -q "$SCRIPT_URL" -O "$SCRIPT_FILE"
+                log_step "Downloading $HOOK_TYPE script..."
+                wget -q "${URL_HOOKS[$HOOK_TYPE]}" -O "$SCRIPT_FILE"
                 chmod +x "$SCRIPT_FILE"
-                log_step "Running syscall hook patches..."
+                log_step "Running $HOOK_TYPE patches..."
                 ( cd "$SRC_DIR" && bash "$SCRIPT_FILE" )
-                log_ok "Syscall hook applied"
-            fi
-            ;;
-
-        inline)
-            local SCRIPT_URL="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/susfs_inline_hook_patches.sh"
-            local SCRIPT_FILE="$TC_DIR/susfs_inline_hook_patches.sh"
-
-            if grep -q "ksu_handle_execveat" "$SRC_DIR/fs/exec.c" 2>/dev/null; then
-                log_warn "Inline hook already applied — skipping"
-            else
-                log_step "Downloading inline hook script..."
-                wget -q "$SCRIPT_URL" -O "$SCRIPT_FILE"
-                chmod +x "$SCRIPT_FILE"
-                log_step "Running inline hook patches..."
-                ( cd "$SRC_DIR" && bash "$SCRIPT_FILE" )
-                log_ok "Inline hook applied"
+                log_ok "$HOOK_TYPE hook applied"
             fi
             ;;
     esac
@@ -341,18 +324,17 @@ apply_hook() {
     log_group_end
 }
 
-# ── 5.4  Backport patches ────────────────────────────────────────
+# ── 6.4  Backport patches ────────────────────────────────────────
 apply_backport() {
     log_group_start "⬆️" "Backport Patches  [$(ts)]"
     local T0=$(date +%s)
-    local SCRIPT_URL="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/backport_patches.sh"
     local SCRIPT_FILE="$TC_DIR/backport_patches.sh"
 
     if grep -q "path_umount" "$SRC_DIR/fs/namespace.c" 2>/dev/null; then
         log_warn "Backport already applied — skipping"
     else
         log_step "Downloading backport script..."
-        wget -q "$SCRIPT_URL" -O "$SCRIPT_FILE"
+        wget -q "$URL_BACKPORT" -O "$SCRIPT_FILE"
         chmod +x "$SCRIPT_FILE"
         log_step "Running backport patches..."
         ( cd "$SRC_DIR" && bash "$SCRIPT_FILE" )
@@ -363,7 +345,7 @@ apply_backport() {
     log_group_end
 }
 
-# ── 5.5  Kernel compile ──────────────────────────────────────────
+# ── 6.5  Kernel compile ──────────────────────────────────────────
 build_kernel() {
     log_group_start "🔨" "Kernel Compile  [$(ts)]"
     case "$1" in
@@ -427,6 +409,19 @@ android/abi_gki_aarch64_zebra
     log_step "make clean..."
     [[ -d "$OUT_DIR" ]] && make -j"$JOBS" -C "$SRC_DIR" O="$OUT_DIR" clean 2>&1 | sed 's/^/       /'
 
+    # Dynamic defconfig modification based on HOOK_TYPE
+    log_step "Configuring defconfig dynamically..."
+    local DEFCONFIG_PATH="$SRC_DIR/arch/arm64/configs/$DEFCONF"
+    if [[ "$BUILD_TYPE" == "KSU" ]]; then
+        if [[ "$HOOK_TYPE" == "scope-min-1.6" ]]; then
+            log_info "Enabling CONFIG_KSU_MANUAL_HOOK in $DEFCONF"
+            bash "$SRC_DIR/scripts/config" --file "$DEFCONFIG_PATH" -e CONFIG_KSU_MANUAL_HOOK
+        elif [[ "$HOOK_TYPE" =~ ^(rksu|inline|syscall)$ ]]; then
+            log_info "Enabling CONFIG_KSU in $DEFCONF"
+            bash "$SRC_DIR/scripts/config" --file "$DEFCONFIG_PATH" -e CONFIG_KSU
+        fi
+    fi
+
     log_step "make defconfig + fragment..."
     make -j"$JOBS" -C "$SRC_DIR" O="$OUT_DIR" "$DEFCONF" "$FRAG" 2>&1 | sed 's/^/       /'
 
@@ -437,7 +432,7 @@ android/abi_gki_aarch64_zebra
     log_group_end
 }
 
-# ── 5.6  Modules ─────────────────────────────────────────────────
+# ── 6.6  Modules ─────────────────────────────────────────────────
 build_modules() {
     log_group_start "📦" "Modules  [$(ts)]"
     local T0=$(date +%s)
@@ -466,7 +461,7 @@ build_modules() {
     log_group_end
 }
 
-# ── 5.7  Artifact staging ─────────────────────────────────────────
+# ── 6.7  Artifact staging ─────────────────────────────────────────
 stage_artifacts() {
     log_group_start "🗂️" "Staging Artifacts"
     mkdir -p \
@@ -565,7 +560,7 @@ FLASH_EOF
     log_group_end
 }
 
-# ── 5.8  Image repack ─────────────────────────────────────────────
+# ── 6.8  Image repack ─────────────────────────────────────────────
 gki_repack() {
     log_group_start "🖼️" "Image Repack  [$(ts)]"
     local T0=$(date +%s)
@@ -647,7 +642,7 @@ gki_repack() {
     log_group_end
 }
 
-# ── 5.9  Package as ZIP ───────────────────────────────────────────
+# ── 6.9  Package as ZIP ───────────────────────────────────────────
 gen_zip() {
     log_group_start "🤐" "Package  [$(ts)]"
     local T0=$(date +%s)
@@ -655,7 +650,7 @@ gen_zip() {
     local ZIP_DIR="$TC_DIR/NovaKernel/$DEVICE/ZIP"
     local IMG_DIR="$ZIP_DIR/images"
 
-    wget -q "https://raw.githubusercontent.com/OmarAlsmehan/AnyKernel3/refs/heads/master/banner" -O "$ZIP_DIR/banner"
+    wget -q "$URL_BANNER" -O "$ZIP_DIR/banner"
     cp -a "$SRC/boot.img"        "$IMG_DIR/"
     cp -a "$SRC/dtbo.img"        "$IMG_DIR/"
     cp -a "$SRC/vendor_boot.img" "$IMG_DIR/"
@@ -688,9 +683,8 @@ gen_zip() {
     log_group_end
 }
 
-
 # ─────────────────────────────────────────────────────────────────
-#  § 6 — ENTRY POINT
+#  § 7 — ENTRY POINT
 # ─────────────────────────────────────────────────────────────────
 
 ENTRY() {
@@ -703,9 +697,6 @@ ENTRY() {
     fi
 
     # ── Phase selector ───────────────────────────────────────────
-    # --phase ksu   → only fetch_tools + KSU setup/hook/backport
-    # --phase build → only fetch_tools + compile/package
-    # (default)     → full build — both phases
     PHASE="all"
     if [[ "${1:-}" == "--phase" ]]; then
         PHASE="${2:?'--phase requires: ksu | build | all'}"

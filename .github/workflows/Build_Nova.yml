@@ -167,7 +167,7 @@ jobs:
           NK_BACKPORT:       ${{ github.event.inputs.backport }}
         run: |
           chmod +x buildscript.sh
-          ./buildscript.sh --phase ksu
+          ./buildscript.sh --phase ksu 2>&1 | tee -a build.log
 
       - name: 🔨  Build kernel
         timeout-minutes: 60
@@ -179,19 +179,17 @@ jobs:
           NK_BACKPORT:       ${{ github.event.inputs.backport }}
           DEBUG:             ${{ github.event.inputs.debug }}
         run: |
-          ./buildscript.sh --phase build
+          ./buildscript.sh --phase build 2>&1 | tee -a build.log
 
       - name: 🔍  Locate output ZIP
         id: find-zip
         run: |
-          case "${{ matrix.device }}" in
-            a73xq)  DEVICE_DIR="A73"  ;;
-            a52sxq) DEVICE_DIR="A52S" ;;
-            m52xq)  DEVICE_DIR="M52"  ;;
-          esac
-          ZIP=$(find "$HOME/toolchains/NovaKernel/$DEVICE_DIR" -name "*.zip" | head -n1)
-          echo "zip_path=$ZIP"      >> "$GITHUB_OUTPUT"
-          echo "zip_name=$(basename "$ZIP")" >> "$GITHUB_OUTPUT"
+          ZIP_PATH=$(find "$HOME/toolchains/NovaKernel" -type f -name "*.zip" | head -n1)
+          if [ -n "$ZIP_PATH" ]; then
+            echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+            echo "zip_name=$(basename "$ZIP_PATH")" >> "$GITHUB_OUTPUT"
+            echo "sha256=$(sha256sum "$ZIP_PATH" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: ⬆️   Upload artifact
         uses: actions/upload-artifact@v4
@@ -207,8 +205,8 @@ jobs:
           TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
           CHANGELOG:    ${{ github.event.inputs.changelog }}
         run: |
-          ZIP="${{ steps.find-zip.outputs.zip_path }}"
-          ZIP_NAME="${{ steps.find-zip.outputs.zip_name }}"
+          ZIP_PATH="${{ steps.find-zip.outputs.zip_path }}"
+          SHA256="${{ steps.find-zip.outputs.sha256 }}"
           DEVICE="${{ matrix.device }}"
           TYPE="${{ github.event.inputs.kernelsu == 'true' && 'KSU' || 'GKI' }}"
           HOOK="${{ github.event.inputs.hook_type }}"
@@ -218,13 +216,13 @@ jobs:
           TIME=$(date +"%Y-%m-%d %H:%M")
           SHORT_SHA="${GITHUB_SHA:0:7}"
 
-          # تجهيز الرسالة بتنسيق HTML
           CAPTION=$(printf "<b>🚀 NovaKernel — Build Ready!</b>\n\n")
           CAPTION="${CAPTION}<b>📱 Device:</b>  <code>$DEVICE</code>\n"
           CAPTION="${CAPTION}<b>⚙️ Type:</b>    <code>$TYPE</code>\n"
           CAPTION="${CAPTION}<b>🪝 Hook:</b>    <code>$HOOK</code>\n"
           CAPTION="${CAPTION}<b>⬆️ Backport:</b> <code>$BACKPORT</code>\n"
           CAPTION="${CAPTION}<b>🏷️ Release:</b>  $RELEASE_LABEL\n"
+          CAPTION="${CAPTION}<b>🔑 SHA256:</b>   <code>${SHA256:0:16}...${SHA256: -8}</code>\n"
           CAPTION="${CAPTION}<b>🔖 Commit:</b>   <a href=\"https://github.com/${{ github.repository }}/commit/${{ github.sha }}\">$SHORT_SHA</a>\n"
           CAPTION="${CAPTION}<b>🕒 Time:</b>     <i>$TIME</i>\n\n"
           CAPTION="${CAPTION}<b>📝 Changelog:</b>\n<blockquote>$CHANGELOG</blockquote>\n\n"
@@ -232,12 +230,12 @@ jobs:
 
           curl -sS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" \
             -F chat_id="$TG_CHAT_ID" \
-            -F document=@"$ZIP;filename=$ZIP_NAME" \
+            -F document=@"$ZIP_PATH" \
             -F caption="$CAPTION" \
             -F parse_mode=HTML
 
       - name: 📋  Write job summary
-        if: always()
+        if: success()
         run: |
           ZIP="${{ steps.find-zip.outputs.zip_name }}"
           DEVICE="${{ matrix.device }}"
@@ -263,3 +261,30 @@ jobs:
             echo "| 🏷️ Release   | $RELEASE_LABEL |"
             echo "| 📦 Output    | \`$ZIP\` |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: ❌  Send Build Log on Failure
+        if: failure()
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
+        run: |
+          DEVICE="${{ matrix.device }}"
+          SHORT_SHA="${GITHUB_SHA:0:7}"
+          
+          CAPTION=$(printf "<b>❌ NovaKernel — Build Failed!</b>\n\n")
+          CAPTION="${CAPTION}<b>📱 Device:</b>  <code>$DEVICE</code>\n"
+          CAPTION="${CAPTION}<b>🔖 Commit:</b>   <a href=\"https://github.com/${{ github.repository }}/commit/${{ github.sha }}\">$SHORT_SHA</a>\n"
+          CAPTION="${CAPTION}<b>📄 Log:</b> Check the attached <code>build.log</code> for details."
+
+          if [ -f "build.log" ]; then
+            curl -sS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" \
+              -F chat_id="$TG_CHAT_ID" \
+              -F document=@"build.log" \
+              -F caption="$CAPTION" \
+              -F parse_mode=HTML
+          else
+            curl -sS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+              -F chat_id="$TG_CHAT_ID" \
+              -F text="$CAPTION (Log file not found)" \
+              -F parse_mode=HTML
+          fi
