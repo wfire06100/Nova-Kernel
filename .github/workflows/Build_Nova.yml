@@ -20,34 +20,22 @@ on:
         default: false
 
       ksu_repo:
-        description: "KernelSU repo URL (optional)"
+        description: "Custom KSU Repo URL (Leave empty for default)"
         required: false
+        type: string
         default: ""
 
       ksu_branch:
-        description: "KernelSU branch"
+        description: "KernelSU Branch (Type any branch name)"
         required: false
-        type: choice
+        type: string
         default: "legacy-susfs-v2"
-        options:
-          - legacy
-          - main
-          - next
-          - susfs-main
-          - susfs-next
-          - legacy-susfs-v2
-          - custom
-
-      ksu_branch_custom:
-        description: "Custom branch name (only if ksu_branch = custom)"
-        required: false
-        default: ""
 
       hook_type:
-        description: "KernelSU hook type (ignored if kernelsu = false)"
+        description: "KernelSU hook type"
         required: false
         type: choice
-        default: "Disabled"
+        default: "kprobes"
         options:
           - kprobes
           - scope-min-1.6
@@ -56,10 +44,16 @@ on:
           - inline
 
       backport:
-        description: "Apply backport patches? (ignored if kernelsu = false)"
+        description: "Apply backport patches?"
         required: false
         type: boolean
         default: false
+
+      use_ak3:
+        description: "Package with AnyKernel3? (AK3 ZIP)"
+        required: true
+        type: boolean
+        default: true
 
       debug:
         description: "SELinux permissive (debug build)"
@@ -73,18 +67,10 @@ on:
         type: boolean
         default: true
 
-      release_type:
-        description: "Release type"
-        required: true
-        type: choice
-        default: "beta"
-        options:
-          - stable
-          - beta
-
       changelog:
         description: "Build changelog / notes"
         required: false
+        type: string
         default: "No changelog provided"
 
 concurrency:
@@ -92,199 +78,107 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-
-# ───────── Setup Matrix ─────────
   setup:
     runs-on: ubuntu-24.04
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
-
     steps:
-      - name: 🗂️  Prepare build matrix
+      - name: 🗂️ Prepare build matrix
         id: set-matrix
         run: |
-          case "${{ github.event.inputs.variant }}" in
-            all)    echo 'matrix=["a73xq","a52sxq","m52xq"]' >> "$GITHUB_OUTPUT" ;;
-            a73xq)  echo 'matrix=["a73xq"]'                  >> "$GITHUB_OUTPUT" ;;
-            a52sxq) echo 'matrix=["a52sxq"]'                 >> "$GITHUB_OUTPUT" ;;
-            m52xq)  echo 'matrix=["m52xq"]'                  >> "$GITHUB_OUTPUT" ;;
-          esac
+          if [[ "${{ github.event.inputs.variant }}" == "all" ]]; then
+            echo 'matrix=["a73xq","a52sxq","m52xq"]' >> "$GITHUB_OUTPUT"
+          else
+            echo 'matrix=["${{ github.event.inputs.variant }}"]' >> "$GITHUB_OUTPUT"
+          fi
 
-# ───────── Build Job ─────────
   build:
     needs: setup
     runs-on: ubuntu-24.04
     name: "🔨 Build (${{ matrix.device }})"
-
     strategy:
       matrix:
         device: ${{ fromJSON(needs.setup.outputs.matrix) }}
       fail-fast: false
 
     steps:
-      - name: 📥  Checkout source
+      - name: 📥 Checkout source
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
 
-      - name: 📦  Install dependencies
+      - name: 📦 Install dependencies
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y \
             git curl wget unzip tar lz4 zip patch \
             bc bison flex libssl-dev libelf-dev \
-            python3 cpio rsync \
-            make gcc g++ binutils
+            python3 cpio rsync make gcc g++ binutils
 
-      - name: 💾  Setup swap (10 GB)
+      - name: 💾 Setup swap
         uses: pierotofy/set-swap-space@master
         with:
           swap-size-gb: 10
 
-      - name: 🔎  Detect clang version
-        id: clangver
-        shell: bash
-        run: |
-          CLANGVER=$(grep -oP 'CLANGVER="\K[^"]+' buildscript.sh)
-          echo "version=$CLANGVER" >> "$GITHUB_OUTPUT"
-
-      - name: 📂  Clang cache
-        id: clang-cache
-        uses: actions/cache@v4
-        with:
-          path: ~/toolchains/${{ steps.clangver.outputs.version }}
-          key: clang-${{ runner.os }}-${{ steps.clangver.outputs.version }}
-
-      - name: ⚡  KernelSU Setup
-        if: github.event.inputs.kernelsu == 'true'
-        timeout-minutes: 15
+      - name: 🔨 Run Build Pipeline
         env:
-          NK_VARIANT:        ${{ matrix.device }}
-          NK_KSU:            ${{ github.event.inputs.kernelsu }}
-          NK_KSU_REPO:       ${{ github.event.inputs.ksu_repo }}
-          NK_KSU_BRANCH:     ${{ github.event.inputs.ksu_branch == 'custom' && github.event.inputs.ksu_branch_custom || github.event.inputs.ksu_branch }}
-          NK_HOOK_TYPE:      ${{ github.event.inputs.hook_type }}
-          NK_BACKPORT:       ${{ github.event.inputs.backport }}
+          NK_VARIANT:    ${{ matrix.device }}
+          NK_KSU:        ${{ github.event.inputs.kernelsu }}
+          NK_KSU_REPO:   ${{ github.event.inputs.ksu_repo }}
+          NK_KSU_BRANCH: ${{ github.event.inputs.ksu_branch }}
+          NK_HOOK_TYPE:  ${{ github.event.inputs.hook_type }}
+          NK_BACKPORT:   ${{ github.event.inputs.backport }}
+          NK_USE_AK3:    ${{ github.event.inputs.use_ak3 }}
+          DEBUG:         ${{ github.event.inputs.debug }}
         run: |
           chmod +x buildscript.sh
-          ./buildscript.sh --phase ksu 2>&1 | tee -a build.log
+          ./buildscript.sh
 
-      - name: 🔨  Build kernel
-        timeout-minutes: 60
-        env:
-          NK_VARIANT:        ${{ matrix.device }}
-          NK_KSU:            ${{ github.event.inputs.kernelsu }}
-          NK_KSU_BRANCH:     ${{ github.event.inputs.ksu_branch == 'custom' && github.event.inputs.ksu_branch_custom || github.event.inputs.ksu_branch }}
-          NK_HOOK_TYPE:      ${{ github.event.inputs.hook_type }}
-          NK_BACKPORT:       ${{ github.event.inputs.backport }}
-          DEBUG:             ${{ github.event.inputs.debug }}
-        run: |
-          ./buildscript.sh --phase build 2>&1 | tee -a build.log
-
-      - name: 🔍  Locate output ZIP
+      - name: 🔍 Locate output ZIP
         id: find-zip
         run: |
-          ZIP_PATH=$(find "$HOME/toolchains/NovaKernel" -type f -name "*.zip" | head -n1)
-          if [ -n "$ZIP_PATH" ]; then
-            echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
-            echo "zip_name=$(basename "$ZIP_PATH")" >> "$GITHUB_OUTPUT"
-            echo "sha256=$(sha256sum "$ZIP_PATH" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
-          fi
+          DEVICE_DIR=$(echo "${{ matrix.device }}" | sed 's/xq//' | tr 'a-z' 'A-Z')
+          ZIP=$(find "$HOME/toolchains/NovaKernel/$DEVICE_DIR/ZIP" -name "*.zip" | head -n1)
+          echo "zip_path=$ZIP" >> "$GITHUB_OUTPUT"
+          echo "zip_name=$(basename "$ZIP")" >> "$GITHUB_OUTPUT"
 
-      - name: ⬆️   Upload artifact
+      - name: ⬆️ Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.find-zip.outputs.zip_name }}
           path: ${{ steps.find-zip.outputs.zip_path }}
           compression-level: 0
 
-      - name: 📤  Upload to Telegram
+      - name: 📤 Upload to Telegram
         if: success() && github.event.inputs.upload_to_telegram == 'true'
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
           CHANGELOG:    ${{ github.event.inputs.changelog }}
         run: |
-          ZIP_PATH="${{ steps.find-zip.outputs.zip_path }}"
-          SHA256="${{ steps.find-zip.outputs.sha256 }}"
+          ZIP="${{ steps.find-zip.outputs.zip_path }}"
+          ZIP_NAME="${{ steps.find-zip.outputs.zip_name }}"
           DEVICE="${{ matrix.device }}"
           TYPE="${{ github.event.inputs.kernelsu == 'true' && 'KSU' || 'GKI' }}"
           HOOK="${{ github.event.inputs.hook_type }}"
-          BACKPORT="${{ github.event.inputs.backport }}"
-          RELEASE="${{ github.event.inputs.release_type }}"
-          RELEASE_LABEL=$([[ "$RELEASE" == "stable" ]] && echo "✅ Stable" || echo "🧪 Beta")
-          TIME=$(date +"%Y-%m-%d %H:%M")
+          AK3="${{ github.event.inputs.use_ak3 == 'true' && '✅ Yes' || '❌ No' }}"
           SHORT_SHA="${GITHUB_SHA:0:7}"
+          TIME=$(date +"%Y-%m-%d %H:%M")
 
           CAPTION=$(printf "<b>🚀 NovaKernel — Build Ready!</b>\n\n")
           CAPTION="${CAPTION}<b>📱 Device:</b>  <code>$DEVICE</code>\n"
           CAPTION="${CAPTION}<b>⚙️ Type:</b>    <code>$TYPE</code>\n"
-          CAPTION="${CAPTION}<b>🪝 Hook:</b>    <code>$HOOK</code>\n"
-          CAPTION="${CAPTION}<b>⬆️ Backport:</b> <code>$BACKPORT</code>\n"
-          CAPTION="${CAPTION}<b>🏷️ Release:</b>  $RELEASE_LABEL\n"
-          CAPTION="${CAPTION}<b>🔑 SHA256:</b>   <code>${SHA256:0:16}...${SHA256: -8}</code>\n"
+          [[ "$TYPE" == "KSU" ]] && CAPTION="${CAPTION}<b>🪝 Hook:</b>    <code>$HOOK</code>\n"
+          CAPTION="${CAPTION}<b>📦 AnyKernel3:</b> $AK3\n"
           CAPTION="${CAPTION}<b>🔖 Commit:</b>   <a href=\"https://github.com/${{ github.repository }}/commit/${{ github.sha }}\">$SHORT_SHA</a>\n"
           CAPTION="${CAPTION}<b>🕒 Time:</b>     <i>$TIME</i>\n\n"
           CAPTION="${CAPTION}<b>📝 Changelog:</b>\n<blockquote>$CHANGELOG</blockquote>\n\n"
-          CAPTION="${CAPTION}🛠 <i>Built with Passion</i>"
+          CAPTION="${CAPTION}🛠 <i>Built via GitHub Actions</i>"
+
+          echo "Uploading $ZIP_NAME to Telegram..."
 
           curl -sS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" \
             -F chat_id="$TG_CHAT_ID" \
-            -F document=@"$ZIP_PATH" \
+            -F document=@"$ZIP" \
             -F caption="$CAPTION" \
-            -F parse_mode=HTML
-
-      - name: 📋  Write job summary
-        if: success()
-        run: |
-          ZIP="${{ steps.find-zip.outputs.zip_name }}"
-          DEVICE="${{ matrix.device }}"
-          TYPE="${{ github.event.inputs.kernelsu == 'true' && 'KSU' || 'GKI' }}"
-          HOOK="${{ github.event.inputs.hook_type }}"
-          BACKPORT="${{ github.event.inputs.backport }}"
-          RELEASE="${{ github.event.inputs.release_type }}"
-          RELEASE_LABEL=$([[ "$RELEASE" == "stable" ]] && echo "✅ Stable" || echo "🧪 Beta")
-          CHANGELOG="${{ github.event.inputs.changelog }}"
-
-          {
-            echo "## 🚀 NovaKernel — \`$DEVICE\` [\`$TYPE\`]"
-            echo ""
-            echo "> ### 📝 Changelog"
-            echo "> $CHANGELOG"
-            echo ""
-            echo "| Field | Value |"
-            echo "|:------|:------|"
-            echo "| 📱 Device    | \`$DEVICE\` |"
-            echo "| 🏷️ Type      | \`$TYPE\` |"
-            echo "| 🪝 Hook      | \`$HOOK\` |"
-            echo "| ⬆️ Backport  | \`$BACKPORT\` |"
-            echo "| 🏷️ Release   | $RELEASE_LABEL |"
-            echo "| 📦 Output    | \`$ZIP\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: ❌  Send Build Log on Failure
-        if: failure()
-        env:
-          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
-        run: |
-          DEVICE="${{ matrix.device }}"
-          SHORT_SHA="${GITHUB_SHA:0:7}"
-          
-          CAPTION=$(printf "<b>❌ NovaKernel — Build Failed!</b>\n\n")
-          CAPTION="${CAPTION}<b>📱 Device:</b>  <code>$DEVICE</code>\n"
-          CAPTION="${CAPTION}<b>🔖 Commit:</b>   <a href=\"https://github.com/${{ github.repository }}/commit/${{ github.sha }}\">$SHORT_SHA</a>\n"
-          CAPTION="${CAPTION}<b>📄 Log:</b> Check the attached <code>build.log</code> for details."
-
-          if [ -f "build.log" ]; then
-            curl -sS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendDocument" \
-              -F chat_id="$TG_CHAT_ID" \
-              -F document=@"build.log" \
-              -F caption="$CAPTION" \
-              -F parse_mode=HTML
-          else
-            curl -sS -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
-              -F chat_id="$TG_CHAT_ID" \
-              -F text="$CAPTION (Log file not found)" \
-              -F parse_mode=HTML
-          fi
+            -F parse_mode="HTML"

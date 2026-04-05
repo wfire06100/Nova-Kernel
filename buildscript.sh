@@ -1,63 +1,61 @@
-#!/bin/env bash
+#!/usr/bin/env bash
 
-set -e
-set -o pipefail
+set -euo pipefail
 
 # ════════════════════════════════════════════════════════════════
-#  NovaKernel Build Script
-#  Devices: A73 (a73xq) | A52S (a52sxq) | M52 (m52xq)
+#  🔥 NovaKernel Unified Build Script
 # ════════════════════════════════════════════════════════════════
 
-# ─────────────────────────────────────────────────────────────────
-#  § 1 — CONFIGURATION & GLOBAL VARIABLES
-# ─────────────────────────────────────────────────────────────────
+export IN_GHA="${GITHUB_ACTIONS:-false}"
 
-# --- Base System Paths ---
-SRC_DIR="$(pwd)"
-OUT_DIR="$SRC_DIR/out"
-TC_DIR="$HOME/toolchains"
-CLANGVER="clang-r563880c"
-CLANG_PREBUILT_BIN="$TC_DIR/$CLANGVER/bin/"
+# ────────────────────────────────────────────────────────────────
+#  § 1 — CONFIGURATION (الروابط والإعدادات)
+# ────────────────────────────────────────────────────────────────
 
-# --- Toolchain & Assets URLs ---
-URL_CLANG="https://github.com/OmarAlsmehan/Android-tools/releases/download/clang-r563880c-1/clang-r563880c.tar.gz"
-URL_MAGISK_API="https://api.github.com/repos/topjohnwu/Magisk/releases"
-URL_AVBTOOL="https://android.googlesource.com/platform/external/avb/+/refs/heads/main/avbtool.py?format=TEXT"
-URL_BANNER="https://raw.githubusercontent.com/OmarAlsmehan/AnyKernel3/refs/heads/master/banner"
+export CLANGVER="clang-r563880c"
+export CLANG_URL="https://github.com/OmarAlsmehan/Android-tools/releases/download/clang-r563880c-1/clang-r563880c.tar.gz"
+export MAGISK_API_URL="https://api.github.com/repos/topjohnwu/Magisk/releases"
+export AVBTOOL_URL="https://android.googlesource.com/platform/external/avb/+/refs/heads/main/avbtool.py?format=TEXT"
+export DEFAULT_KSU_REPO="https://github.com/OmarAlsmehan/KernelSU-Next.git"
 
-# --- KernelSU URLs ---
-URL_KSU_SETUP="https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh"
-URL_KSU_DEFAULT_REPO="https://github.com/OmarAlsmehan/KernelSU-Next.git"
+# AnyKernel3 Config (ضع رابط الـ Fork الخاص بك هنا)
+export ANYKERNEL3_URL="https://github.com/osm0sis/AnyKernel3.git"
+export ANYKERNEL3_BRANCH="master"
 
-# --- Patches & Scripts URLs ---
-declare -A URL_HOOKS=(
-    ["scope-min-1.6"]="https://raw.githubusercontent.com/OmarAlsmehan/Random-stuff/e2dca691b866415c8ec59f306536f59c633be8e7/scope-min-manual-hook.1.6-5.4.patch"
-    ["rksu"]="https://raw.githubusercontent.com/rksuorg/kernel_patches/refs/heads/master/manual_hook/kernel-4.19_5.4.patch"
-    ["syscall"]="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/syscall_hook_patches.sh"
-    ["inline"]="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/susfs_inline_hook_patches.sh"
-)
-URL_BACKPORT="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/backport_patches.sh"
+export BRANCH="android11"
+export KMI_GENERATION=2
+export DEFCONF="rio_defconfig"
 
-# --- Stock Images URLs ---
-declare -A URL_STOCK_IMAGES=(
+# Device Maps
+declare -A DEVICE_IMAGE_URLS=(
     ["A73"]="https://github.com/nicodotgit/proprietary_vendor_samsung_a73xq/releases/download/A736BXXSAGZA1_ODM/A736BXXSAGZA1_kernel.tar"
     ["A52S"]="https://github.com/RisenID/proprietary_vendor_samsung_a52sxq/releases/download/A528BXXUAGXK8_BTU/A528BXXUAGXK8_kernel.tar"
     ["M52"]="https://github.com/nicodotgit/proprietary_vendor_samsung_m52xq/releases/download/M526BXXS7CYE1_CAU/M526BXXS7CYE1_kernel.tar"
 )
 
-# ─────────────────────────────────────────────────────────────────
-#  § 2 — CONSTANTS & STYLES
-# ─────────────────────────────────────────────────────────────────
+declare -A DEVICE_MAP=(
+    ["a73xq"]="A73"
+    ["a52sxq"]="A52S"
+    ["m52xq"]="M52"
+)
 
-BOLD="\e[1m";  RESET="\e[0m";  DIM="\e[2m"
-CYAN="\e[1;36m";  GREEN="\e[1;32m";  YELLOW="\e[1;33m"
-RED="\e[1;31m"
+# Hooks URLs
+declare -A HOOK_SOURCES=(
+    ["scope-min-1.6"]="https://raw.githubusercontent.com/OmarAlsmehan/Random-stuff/refs/heads/main/scope-min-manual-hook.1.6-5.4.patch"
+    ["rksu"]="https://raw.githubusercontent.com/rksuorg/kernel_patches/refs/heads/master/manual_hook/kernel-4.19_5.4.patch"
+    ["syscall"]="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/syscall_hook_patches.sh"
+    ["inline"]="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/susfs_inline_hook_patches.sh"
+)
 
-IN_GHA="${GITHUB_ACTIONS:-false}"
+export BACKPORT_URL="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/backport_patches.sh"
 
-# ─────────────────────────────────────────────────────────────────
-#  § 3 — LOGGING
-# ─────────────────────────────────────────────────────────────────
+
+# ────────────────────────────────────────────────────────────────
+#  § 2 — UTILS & LOGGING (أدوات التسجيل)
+# ────────────────────────────────────────────────────────────────
+
+BOLD="\e[1m"; RESET="\e[0m"; DIM="\e[2m"
+CYAN="\e[1;36m"; GREEN="\e[1;32m"; YELLOW="\e[1;33m"; RED="\e[1;31m"
 
 log_group_start() {
     if [[ "$IN_GHA" == "true" ]]; then
@@ -68,301 +66,183 @@ log_group_start() {
         echo -e "${CYAN}${BOLD}╚════════════════════════════════════════╝${RESET}"
     fi
 }
-log_group_end() { [[ "$IN_GHA" == "true" ]] && echo "::endgroup::"; }
+log_group_end() { [[ "$IN_GHA" == "true" ]] && echo "::endgroup::" || echo ""; }
 log_notice()    { [[ "$IN_GHA" == "true" ]] && echo "::notice::$1" || true; }
+log_warn()      { echo -e "${YELLOW}  ⚠   $1${RESET}"; [[ "$IN_GHA" == "true" ]] && echo "::warning::$1" || true; }
+log_err()       { echo -e "${RED}${BOLD}  ✖   $1${RESET}" >&2; [[ "$IN_GHA" == "true" ]] && echo "::error::$1" || true; exit 1; }
 log_step()      { echo -e "${GREEN}${BOLD}  ➤  $1${RESET}"; }
 log_info()      { echo -e "${DIM}       $1${RESET}"; }
-log_warn()      { echo -e "${YELLOW}  ⚠   $1${RESET}"
-                  [[ "$IN_GHA" == "true" ]] && echo "::warning::$1" || true; }
 log_ok()        { echo -e "${GREEN}  ✔   $1${RESET}"; }
-log_err()       { echo -e "${RED}${BOLD}  ✖   $1${RESET}" >&2
-                  [[ "$IN_GHA" == "true" ]] && echo "::error::$1" || true; }
-log_kv()        { printf "  ${DIM}%-14s${RESET} ${BOLD}%s${RESET}\n" "$1" "$2"; }
 log_sep()       { echo -e "${DIM}  ────────────────────────────────────────${RESET}"; }
 elapsed()       { date -u -d @$(( $(date +%s) - $1 )) +'%-Mm %-Ss'; }
-ts()            { date '+%H:%M:%S'; }
-
-# ─────────────────────────────────────────────────────────────────
-#  § 4 — CORE UTILITIES
-# ─────────────────────────────────────────────────────────────────
 
 check_dependencies() {
     log_group_start "🔍" "Dependency Check"
     local missing=false
     for tool in git curl wget unzip tar lz4 awk sed zip patch; do
-        if command -v "$tool" &>/dev/null; then
-            log_info "$(printf '%-14s' "$tool")✔  $(command -v "$tool")"
-        else
-            log_err "Missing tool: '$tool'"
-            missing=true
-        fi
+        if ! command -v "$tool" &>/dev/null; then log_err "Missing: '$tool'"; missing=true; fi
     done
-    $missing && { log_err "Install missing tools and retry."; exit 1; }
+    $missing && log_err "Install missing tools and retry."
     log_ok "All dependencies satisfied"
     log_group_end
 }
 
-init_vars() {
-    JOBS=$(nproc)
-    export SRC_DIR OUT_DIR TC_DIR JOBS CLANGVER CLANG_PREBUILT_BIN
-    export PATH="$TC_DIR:$CLANG_PREBUILT_BIN:$PATH"
+
+# ────────────────────────────────────────────────────────────────
+#  § 3 — DEFCONFIG MANAGER
+# ────────────────────────────────────────────────────────────────
+
+set_config() {
+    local config=$1; local value=$2
+    local target_file="$SRC_DIR/arch/arm64/configs/$FRAG"
+    [[ ! -f "$target_file" ]] && target_file="$SRC_DIR/arch/arm64/configs/$DEFCONF"
+    sed -i "/^${config}=/d; /^# ${config} is not set/d" "$target_file"
+    echo "${config}=${value}" >> "$target_file"
 }
 
-# ─────────────────────────────────────────────────────────────────
-#  § 5 — INTERACTIVE PROMPTS  (local builds only)
-# ─────────────────────────────────────────────────────────────────
+remove_config() {
+    local config=$1
+    local target_file="$SRC_DIR/arch/arm64/configs/$FRAG"
+    [[ ! -f "$target_file" ]] && target_file="$SRC_DIR/arch/arm64/configs/$DEFCONF"
+    sed -i "/^${config}=/d; /^# ${config} is not set/d" "$target_file"
+}
 
-prompt_variant() {
-    echo -e "${CYAN}${BOLD}"
-    echo "  Select target device:"
-    echo "  [1] Galaxy A73 5G  (a73xq)"
-    echo "  [2] Galaxy A52s 5G (a52sxq)"
-    echo "  [3] Galaxy M52 5G  (m52xq)"
-    echo -e "${RESET}"
-    read -rp "  → Choice [1-3]: " choice
-    case "$choice" in
-        1) VARIANT="a73xq";;
-        2) VARIANT="a52sxq";;
-        3) VARIANT="m52xq";;
-        *) log_err "Invalid choice"; exit 1;;
+inject_ksu_configs() {
+    local hook_type=$1
+    log_step "Injecting KernelSU configurations ($hook_type)..."
+
+    set_config "CONFIG_KSU" "y"
+    remove_config "CONFIG_KSU_MANUAL_HOOK"
+    remove_config "CONFIG_KPROBES"
+    remove_config "CONFIG_HAVE_KPROBES"
+    remove_config "CONFIG_KPROBE_EVENTS"
+
+    case "$hook_type" in
+        kprobes)
+            set_config "CONFIG_KPROBES" "y"
+            set_config "CONFIG_HAVE_KPROBES" "y"
+            set_config "CONFIG_KPROBE_EVENTS" "y"
+            ;;
+        scope-min-1.6|rksu|syscall|inline)
+            set_config "CONFIG_KSU_MANUAL_HOOK" "y"
+            ;;
     esac
+    log_ok "Defconfig successfully updated"
 }
 
-prompt_ksu() {
-    echo -e "${CYAN}${BOLD}"
-    echo "  Build with KernelSU support?"
-    echo "  [1] No  — standard GKI kernel"
-    echo "  [2] Yes — KernelSU kernel"
-    echo -e "${RESET}"
-    read -rp "  → Choice [1-2]: " choice
-    case "$choice" in
-        1) KERNELSU=false;;
-        2) KERNELSU=true;;
-        *) log_err "Invalid choice"; exit 1;;
-    esac
-}
 
-prompt_ksu_branch() {
-    echo -e "${CYAN}${BOLD}"
-    echo "  Select KernelSU branch:"
-    echo "  [1] legacy          (stable, recommended)"
-    echo "  [2] main            (latest stable)"
-    echo "  [3] next            (bleeding edge)"
-    echo "  [4] susfs-main      (SuSFS + main)"
-    echo "  [5] susfs-next      (SuSFS + next)"
-    echo "  [6] legacy-susfs-v2 (SuSFS v2 + legacy)"
-    echo "  [7] custom          (enter manually)"
-    echo -e "${RESET}"
-    read -rp "  → Choice [1-7]: " choice
-    case "$choice" in
-        1) KSU_BRANCH="legacy";;
-        2) KSU_BRANCH="main";;
-        3) KSU_BRANCH="next";;
-        4) KSU_BRANCH="susfs-main";;
-        5) KSU_BRANCH="susfs-next";;
-        6) KSU_BRANCH="legacy-susfs-v2";;
-        7) read -rp "  → Branch name: " KSU_BRANCH
-           [[ -z "$KSU_BRANCH" ]] && { log_err "Branch name cannot be empty"; exit 1; };;
-        *) log_err "Invalid choice"; exit 1;;
-    esac
-}
+# ────────────────────────────────────────────────────────────────
+#  § 4 — HOOKS & KSU ENGINE
+# ────────────────────────────────────────────────────────────────
 
-prompt_hook_type() {
-    echo -e "${CYAN}${BOLD}"
-    echo "  Select KernelSU hook type:"
-    echo "  [1] kprobes      — kprobe-based (no kernel patches needed)"
-    echo "  [2] scope-min-1.6 — scope-min manual hook patch (5.4)"
-    echo "  [3] rksu         — rksu manual hook patch (4.19/5.4)"
-    echo "  [4] syscall      — syscall hook patches"
-    echo "  [5] inline       — inline / susfs hook patches"
-    echo -e "${RESET}"
-    read -rp "  → Choice [1-5]: " choice
-    case "$choice" in
-        1) HOOK_TYPE="kprobes";;
-        2) HOOK_TYPE="scope-min-1.6";;
-        3) HOOK_TYPE="rksu";;
-        4) HOOK_TYPE="syscall";;
-        5) HOOK_TYPE="inline";;
-        *) log_err "Invalid choice"; exit 1;;
-    esac
-}
-
-prompt_backport() {
-    echo -e "${CYAN}${BOLD}"
-    echo "  Apply backport patches?"
-    echo "  [1] No"
-    echo "  [2] Yes"
-    echo -e "${RESET}"
-    read -rp "  → Choice [1-2]: " choice
-    case "$choice" in
-        1) BACKPORT=false;;
-        2) BACKPORT=true;;
-        *) log_err "Invalid choice"; exit 1;;
-    esac
-}
-
-# ─────────────────────────────────────────────────────────────────
-#  § 6 — BUILD PHASES
-# ─────────────────────────────────────────────────────────────────
-
-# ── 6.1  Toolchain & assets ──────────────────────────────────────
-fetch_tools() {
-    log_group_start "🧰" "Toolchain & Assets"
-    mkdir -p "$TC_DIR"
-
-    if [[ ! -d "$CLANG_PREBUILT_BIN" ]]; then
-        log_step "Downloading Clang ($CLANGVER)..."
-        mkdir -p "$TC_DIR/$CLANGVER"
-        wget --progress=bar:force:noscroll "$URL_CLANG" -P "$TC_DIR"
-        tar xf "$TC_DIR/$CLANGVER.tar.gz" -C "$TC_DIR/$CLANGVER"
-        rm "$TC_DIR/$CLANGVER.tar.gz"
-        log_ok "Clang ready"
-    else
-        log_ok "Clang — cached ✓"
-    fi
-
-    if [[ ! -f "$TC_DIR/magiskboot" ]]; then
-        log_step "Fetching magiskboot..."
-        local apk_url
-        apk_url="$(curl -s ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} \
-            "$URL_MAGISK_API" \
-            | grep -oE 'https://[^"]+\.apk' | grep 'Magisk[-.]v' | head -n1)"
-        wget -q --show-progress "$apk_url" -O "$TC_DIR/magisk.apk"
-        unzip -p "$TC_DIR/magisk.apk" "lib/x86_64/libmagiskboot.so" > "$TC_DIR/magiskboot"
-        chmod +x "$TC_DIR/magiskboot"
-        rm "$TC_DIR/magisk.apk"
-        log_ok "magiskboot ready"
-    else
-        log_ok "magiskboot — cached ✓"
-    fi
-
-    if [[ ! -f "$TC_DIR/avbtool" ]]; then
-        log_step "Fetching avbtool..."
-        curl -s "$URL_AVBTOOL" | base64 --decode > "$TC_DIR/avbtool"
-        chmod +x "$TC_DIR/avbtool"
-        log_ok "avbtool ready"
-    else
-        log_ok "avbtool — cached ✓"
-    fi
-
-    if [[ ! -d "$TC_DIR/images" ]]; then
-        log_step "Downloading stock kernel images..."
-        mkdir -p "$TC_DIR/images"
-        for name in "${!URL_STOCK_IMAGES[@]}"; do
-            log_step "→ Downloading $name image..."
-            mkdir -p "$TC_DIR/images/$name"
-            wget -qO- "${URL_STOCK_IMAGES[$name]}" | tar xf - -C "$TC_DIR/images/$name"
-            lz4 -dm --rm "$TC_DIR/images/$name/"*
-            log_ok "$name image ready"
-        done
-    else
-        log_ok "Stock images — cached ✓"
-    fi
-
-    log_group_end
-}
-
-# ── 6.2  KernelSU setup ──────────────────────────────────────────
-setup_kernelsu() {
-    log_group_start "⚡" "KernelSU Setup"
-
-    log_step "Running tiann/KernelSU setup..."
-    curl -LSs "$URL_KSU_SETUP" | bash -
-    rm -rf KernelSU
-
-    local KSU_REPO="${NK_KSU_REPO:-$URL_KSU_DEFAULT_REPO}"
-    local KSU_BRANCH_USE="${KSU_BRANCH:-legacy}"
-    log_step "Cloning KernelSU-Next (${KSU_BRANCH_USE})..."
-    log_info "Repo:   $KSU_REPO"
-    log_info "Branch: $KSU_BRANCH_USE"
-    git clone --depth=1 -b "$KSU_BRANCH_USE" "$KSU_REPO" KernelSU
-
-    log_ok "KernelSU-Next integrated"
-    log_group_end
-}
-
-# ── 6.3  Hook patches ────────────────────────────────────────────
 apply_hook() {
-    if [[ "$HOOK_TYPE" == "kprobes" ]]; then
-        log_ok "Hook type: kprobes — handled by KernelSU, no patches needed"
+    local type=$1
+    if [[ "$type" == "kprobes" ]]; then
+        log_info "Hook: kprobes — no code patches needed"
         return
     fi
 
-    log_group_start "🪝" "Hook Patches  [$HOOK_TYPE]  [$(ts)]"
+    log_group_start "🪝" "Hook Patches [$type]"
     local T0=$(date +%s)
 
-    case "$HOOK_TYPE" in
-        scope-min-1.6|rksu)
-            local PATCH_FILE="$TC_DIR/${HOOK_TYPE}.patch"
-            if grep -q "ksu_handle_execveat" "$SRC_DIR/fs/exec.c" 2>/dev/null; then
-                log_warn "$HOOK_TYPE hook already applied — skipping"
-            else
-                log_step "Downloading $HOOK_TYPE patch..."
-                wget -q "${URL_HOOKS[$HOOK_TYPE]}" -O "$PATCH_FILE"
-                log_step "Applying patch..."
-                patch -p1 -d "$SRC_DIR" < "$PATCH_FILE"
-                log_ok "$HOOK_TYPE hook applied"
-            fi
-            ;;
+    if grep -q "ksu_handle_execveat" "$SRC_DIR/fs/exec.c" 2>/dev/null; then
+        log_warn "Hook already detected — skipping"
+        log_group_end; return
+    fi
 
-        syscall|inline)
-            local SCRIPT_FILE="$TC_DIR/${HOOK_TYPE}_patches.sh"
-            if grep -q "ksu_handle_execveat" "$SRC_DIR/fs/exec.c" 2>/dev/null; then
-                log_warn "$HOOK_TYPE hook already applied — skipping"
-            else
-                log_step "Downloading $HOOK_TYPE script..."
-                wget -q "${URL_HOOKS[$HOOK_TYPE]}" -O "$SCRIPT_FILE"
-                chmod +x "$SCRIPT_FILE"
-                log_step "Running $HOOK_TYPE patches..."
-                ( cd "$SRC_DIR" && bash "$SCRIPT_FILE" )
-                log_ok "$HOOK_TYPE hook applied"
-            fi
-            ;;
-    esac
+    local url="${HOOK_SOURCES[$type]:-}"
+    [[ -z "$url" ]] && log_err "Unknown hook type: $type"
 
-    log_ok "Hook patches done in $(elapsed $T0)"
+    local filename="${url##*/}"
+    local dest="$TC_DIR/$filename"
+
+    log_step "Downloading $type..."
+    wget -q "$url" -O "$dest"
+
+    if [[ "$dest" == *.patch ]]; then
+        patch -p1 -d "$SRC_DIR" < "$dest"
+    elif [[ "$dest" == *.sh ]]; then
+        chmod +x "$dest" && ( cd "$SRC_DIR" && bash "$dest" )
+    fi
+
+    log_ok "Hook applied in $(elapsed $T0)"
     log_group_end
 }
 
-# ── 6.4  Backport patches ────────────────────────────────────────
 apply_backport() {
-    log_group_start "⬆️" "Backport Patches  [$(ts)]"
-    local T0=$(date +%s)
-    local SCRIPT_FILE="$TC_DIR/backport_patches.sh"
-
+    log_group_start "⬆️" "Backport Patches"
     if grep -q "path_umount" "$SRC_DIR/fs/namespace.c" 2>/dev/null; then
         log_warn "Backport already applied — skipping"
     else
-        log_step "Downloading backport script..."
-        wget -q "$URL_BACKPORT" -O "$SCRIPT_FILE"
-        chmod +x "$SCRIPT_FILE"
-        log_step "Running backport patches..."
-        ( cd "$SRC_DIR" && bash "$SCRIPT_FILE" )
-        log_ok "Backport patches applied"
+        local script="$TC_DIR/backport.sh"
+        wget -q "$BACKPORT_URL" -O "$script"
+        chmod +x "$script" && ( cd "$SRC_DIR" && bash "$script" )
+        log_ok "Backport applied"
     fi
-
-    log_ok "Backport done in $(elapsed $T0)"
     log_group_end
 }
 
-# ── 6.5  Kernel compile ──────────────────────────────────────────
-build_kernel() {
-    log_group_start "🔨" "Kernel Compile  [$(ts)]"
-    case "$1" in
-        a73xq)  VARIANT="a73xq";  DEVICE="A73";;
-        a52sxq) VARIANT="a52sxq"; DEVICE="A52S";;
-        m52xq)  VARIANT="m52xq";  DEVICE="M52";;
-        *) log_err "Unknown variant: $1"; exit 1;;
-    esac
-    export VARIANT DEVICE ARCH=arm64
+setup_kernelsu() {
+    log_group_start "⚡" "KernelSU Setup"
+    curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -
+    rm -rf KernelSU
+    git clone -b "${NK_KSU_BRANCH:-legacy}" "${NK_KSU_REPO:-$DEFAULT_KSU_REPO}" KernelSU
+    log_ok "KernelSU integrated"
+    log_group_end
+}
 
-    export BRANCH="android11" KMI_GENERATION=2 LLVM=1 DEPMOD=depmod
-    export KCFLAGS="${KCFLAGS} -D__ANDROID_COMMON_KERNEL__"
-    export STOP_SHIP_TRACEPRINTK=1 IN_KERNEL_MODULES=1
-    export DO_NOT_STRIP_MODULES=1 INSTALL_MOD_STRIP=1
-    export DEFCONF="rio_defconfig" FRAG="${VARIANT}.config"
-    export ABI_DEFINITION=android/abi_gki_aarch64.xml
-    export KMI_SYMBOL_LIST=android/abi_gki_aarch64
+
+# ────────────────────────────────────────────────────────────────
+#  § 5 — BUILD PHASES (البناء)
+# ────────────────────────────────────────────────────────────────
+
+fetch_tools() {
+    log_group_start "🧰" "Toolchain & Assets"
+    mkdir -p "$TC_DIR/images"
+
+    if [[ ! -d "$CLANG_PREBUILT_BIN" ]]; then
+        log_step "Downloading Clang..."
+        wget -q "$CLANG_URL" -O "$TC_DIR/clang.tar.gz"
+        mkdir -p "$TC_DIR/$CLANGVER" && tar xf "$TC_DIR/clang.tar.gz" -C "$TC_DIR/$CLANGVER"
+        rm "$TC_DIR/clang.tar.gz"
+    fi
+
+    [[ ! -f "$TC_DIR/magiskboot" ]] && wget -qO- "$MAGISK_API_URL" | grep -oE 'https://[^"]+\.apk' | grep 'Magisk[-.]v' | head -n1 | xargs wget -qO "$TC_DIR/magisk.apk" && unzip -p "$TC_DIR/magisk.apk" "lib/x86_64/libmagiskboot.so" > "$TC_DIR/magiskboot" && chmod +x "$TC_DIR/magiskboot" && rm "$TC_DIR/magisk.apk"
+    [[ ! -f "$TC_DIR/avbtool" ]] && wget -qO "$TC_DIR/avbtool" "$AVBTOOL_URL" && chmod +x "$TC_DIR/avbtool"
+
+    for name in "${!DEVICE_IMAGE_URLS[@]}"; do
+        if [[ ! -d "$TC_DIR/images/$name" ]]; then
+            mkdir -p "$TC_DIR/images/$name"
+            wget -qO- "${DEVICE_IMAGE_URLS[$name]}" | tar xf - -C "$TC_DIR/images/$name"
+            lz4 -dm --rm "$TC_DIR/images/$name/"* 2>/dev/null || true
+        fi
+    done
+    log_ok "Tools ready"
+    log_group_end
+}
+
+build_kernel() {
+    log_group_start "🔨" "Kernel Compile"
+    local T0=$(date +%s)
+    
+    # ── 1. Basic Variables ──
+    export VARIANT="$NK_VARIANT"
+    export DEVICE="${DEVICE_MAP[$VARIANT]}"
+    export FRAG="${VARIANT}.config"
+    export BUILD_TYPE=$([[ "$NK_KSU" == "true" ]] && echo "KSU" || echo "GKI")
+    
+    # ── 2. Compiler & Make Flags ──
+    export ARCH=arm64
+    export LLVM=1
+    export DEPMOD=depmod
+    export KCFLAGS="-D__ANDROID_COMMON_KERNEL__"
+    export STOP_SHIP_TRACEPRINTK=1
+    export IN_KERNEL_MODULES=1
+    export INSTALL_MOD_STRIP=1
+
+    # ── 3. GKI & KMI Settings (Android 11 / 5.4) ──
+    export ABI_DEFINITION="android/abi_gki_aarch64.xml"
+    export KMI_SYMBOL_LIST="android/abi_gki_aarch64"
     export ADDITIONAL_KMI_SYMBOL_LISTS="
 android/abi_gki_aarch64_cuttlefish
 android/abi_gki_aarch64_db845c
@@ -386,445 +266,224 @@ android/abi_gki_aarch64_vivo
 android/abi_gki_aarch64_xiaomi
 android/abi_gki_aarch64_zebra
 "
-    export TRIM_NONLISTED_KMI=0 KMI_SYMBOL_LIST_ADD_ONLY=1
-    export KMI_SYMBOL_LIST_STRICT_MODE=0 KMI_ENFORCED=0
+    export TRIM_NONLISTED_KMI=0
+    export KMI_SYMBOL_LIST_ADD_ONLY=1
+    export KMI_SYMBOL_LIST_STRICT_MODE=0
+    export KMI_ENFORCED=0
 
+    # ── 4. Local Version ──
     COMREV=$(git rev-parse --short HEAD)
-    export LOCALVERSION="-NovaAosp-${BRANCH}-${KMI_GENERATION}-${COMREV}-${VARIANT}"
+    export LOCALVERSION="-NovaKernel-${BRANCH}-${KMI_GENERATION}-${COMREV}-${VARIANT}"
 
+    # ── 5. KSU Defconfig Injection ──
+    [[ "$NK_KSU" == "true" ]] && inject_ksu_configs "${NK_HOOK_TYPE:-kprobes}"
+
+    # ── 6. Build Info Logging ──
     log_sep
     log_kv "Device:"    "$DEVICE ($VARIANT)"
     log_kv "Type:"      "$BUILD_TYPE"
     if [[ "$BUILD_TYPE" == "KSU" ]]; then
-        log_kv "KSU Branch:" "${KSU_BRANCH:-legacy}"
-        log_kv "Hook:"       "${HOOK_TYPE:-gki}"
+        log_kv "KSU Branch:" "${NK_KSU_BRANCH:-legacy}"
+        log_kv "Hook:"       "${NK_HOOK_TYPE:-kprobes}"
     fi
     log_kv "Version:"   "5.4.x$LOCALVERSION"
     log_kv "Toolchain:" "$(clang --version | head -n1)"
     log_kv "Jobs:"      "$JOBS"
     log_sep
 
-    local T0=$(date +%s)
-
+    # ── 7. Compilation Steps ──
     log_step "make clean..."
-    [[ -d "$OUT_DIR" ]] && make -j"$JOBS" -C "$SRC_DIR" O="$OUT_DIR" clean 2>&1 | sed 's/^/       /'
+    [[ -d "$OUT_DIR" ]] && make -j"$JOBS" O="$OUT_DIR" clean >/dev/null
 
-    # Dynamic defconfig modification based on HOOK_TYPE
-    log_step "Configuring defconfig dynamically..."
-    local DEFCONFIG_PATH="$SRC_DIR/arch/arm64/configs/$DEFCONF"
-    if [[ "$BUILD_TYPE" == "KSU" ]]; then
-        if [[ "$HOOK_TYPE" == "scope-min-1.6" ]]; then
-            log_info "Enabling CONFIG_KSU_MANUAL_HOOK in $DEFCONF"
-            bash "$SRC_DIR/scripts/config" --file "$DEFCONFIG_PATH" -e CONFIG_KSU_MANUAL_HOOK
-        elif [[ "$HOOK_TYPE" =~ ^(rksu|inline|syscall)$ ]]; then
-            log_info "Enabling CONFIG_KSU in $DEFCONF"
-            bash "$SRC_DIR/scripts/config" --file "$DEFCONFIG_PATH" -e CONFIG_KSU
-        fi
-    fi
-
-    log_step "make defconfig + fragment..."
-    make -j"$JOBS" -C "$SRC_DIR" O="$OUT_DIR" "$DEFCONF" "$FRAG" 2>&1 | sed 's/^/       /'
+    log_step "make defconfig..."
+    make -j"$JOBS" O="$OUT_DIR" "$DEFCONF" "$FRAG" >/dev/null
 
     log_step "make kernel..."
-    make -j"$JOBS" -C "$SRC_DIR" O="$OUT_DIR" 2>&1 | sed 's/^/       /'
-
+    make -j"$JOBS" O="$OUT_DIR" >/dev/null
+    
     log_ok "Kernel compiled in $(elapsed $T0)"
     log_group_end
 }
 
-# ── 6.6  Modules ─────────────────────────────────────────────────
 build_modules() {
-    log_group_start "📦" "Modules  [$(ts)]"
-    local T0=$(date +%s)
-
-    make -j"$JOBS" -C "$SRC_DIR" O="$OUT_DIR" \
-        INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install 2>&1 | sed 's/^/       /'
-
+    log_group_start "📦" "Modules"
+    make -j"$JOBS" O="$OUT_DIR" INSTALL_MOD_PATH=modules INSTALL_MOD_STRIP=1 modules_install >/dev/null
     local MODOUT="$TC_DIR/NovaKernel/$DEVICE/$BUILD_TYPE/modules"
     mkdir -p "$MODOUT"
     find "$OUT_DIR/modules" -name '*.ko' -exec cp '{}' "$MODOUT/" \;
-
-    local KREL
-    KREL=$(cat "$OUT_DIR/include/config/kernel.release")
-    local MODLIB="$OUT_DIR/modules/lib/modules/$KREL"
-    cp "$MODLIB/modules.alias"   "$MODOUT/"
-    cp "$MODLIB/modules.dep"     "$MODOUT/"
-    cp "$MODLIB/modules.softdep" "$MODOUT/"
-    cp "$MODLIB/modules.order"   "$MODOUT/modules.load"
-
-    sed -i 's|\(kernel\/[^: ]*\/\)\([^: ]*\.ko\)|/lib/modules/\2|g' "$MODOUT/modules.dep"
-    sed -i 's|.*\/||g' "$MODOUT/modules.load"
-
-    local KO_COUNT
-    KO_COUNT=$(find "$MODOUT" -name '*.ko' | wc -l)
-    log_ok "Modules done — ${KO_COUNT} .ko files  ($(elapsed $T0))"
+    log_ok "Modules extracted"
     log_group_end
 }
 
-# ── 6.7  Artifact staging ─────────────────────────────────────────
 stage_artifacts() {
     log_group_start "🗂️" "Staging Artifacts"
-    mkdir -p \
-        "$TC_DIR/NovaKernel/$DEVICE/$BUILD_TYPE/modules" \
-        "$TC_DIR/NovaKernel/$DEVICE/ZIP/META-INF/com/google/android" \
-        "$TC_DIR/NovaKernel/$DEVICE/ZIP/images"
-
-    cp "$OUT_DIR/arch/arm64/boot/Image"                      "$TC_DIR/NovaKernel/$DEVICE/kernel"
-    cp "$OUT_DIR/arch/arm64/boot/dtbo.img"                   "$TC_DIR/NovaKernel/$DEVICE/$BUILD_TYPE/dtbo.img"
+    mkdir -p "$TC_DIR/NovaKernel/$DEVICE/ZIP/META-INF/com/google/android" "$TC_DIR/NovaKernel/$DEVICE/ZIP/images"
+    cp "$OUT_DIR/arch/arm64/boot/Image" "$TC_DIR/NovaKernel/$DEVICE/kernel"
+    cp "$OUT_DIR/arch/arm64/boot/dtbo.img" "$TC_DIR/NovaKernel/$DEVICE/$BUILD_TYPE/dtbo.img"
     cp "$OUT_DIR/arch/arm64/boot/dts/vendor/qcom/yupik.dtb" "$TC_DIR/NovaKernel/$DEVICE/dtb"
-    log_ok "Copied → kernel, dtbo.img, dtb"
-
-    echo "# Dummy file; update-binary is a shell script." \
-        > "$TC_DIR/NovaKernel/$DEVICE/ZIP/META-INF/com/google/android/updater-script"
-
-cat >"$TC_DIR/NovaKernel/$DEVICE/ZIP/META-INF/com/google/android/update-binary" <<'FLASH_EOF'
-#!/sbin/sh
-
-OUTFD=/proc/self/fd/$2
-ZIPFILE="$3"
-TMPDIR="/cache/nova"
-
-package_extract_dir() {
-    local entry outfile
-    for entry in $(unzip -l "$ZIPFILE" 2>/dev/null | tail -n+4 | grep -v '/$' \
-                   | grep -o " $1.*$" | cut -c2-); do
-        outfile="$(echo "$entry" | sed "s|${1}|${2}|")"
-        mkdir -p "$(dirname "$outfile")"
-        unzip -o "$ZIPFILE" "$entry" -p > "$outfile"
-    done
-}
-
-ui_print() {
-    while [ "$1" ]; do
-        echo "ui_print $1" >> "$OUTFD"
-        echo "ui_print" >> "$OUTFD"
-        shift
-    done
-}
-
-ui_printfile() {
-    unzip -p "$ZIPFILE" "$1" 2>/dev/null | while IFS= read -r line; do
-        ui_print "$line"
-    done
-}
-
-write_raw_image() {
-    dd if="$1" of="$2"
-}
-
-set_progress() {
-    echo "set_progress $1" >> "$OUTFD"
-}
-
-set_progress 0
-ui_printfile "banner"
-ui_print " "
-ui_print " "
-
-if ! getprop ro.boot.bootloader | grep -qE "A736|A528|M526"; then
-    ui_print "✖ Unsupported device — aborting."
-    exit 1
-fi
-
-mount -o rw,remount -t auto /cache
-mkdir -p "$TMPDIR"
-
-ui_print "→ Extracting images..."
-package_extract_dir "images" "$TMPDIR/"
-set_progress 0.2
-
-ui_print "→ Flashing boot.img..."
-write_raw_image "$TMPDIR/boot.img" "/dev/block/bootdevice/by-name/boot"
-set_progress 0.4
-
-ui_print "→ Flashing dtbo.img..."
-write_raw_image "$TMPDIR/dtbo.img" "/dev/block/bootdevice/by-name/dtbo"
-set_progress 0.6
-
-ui_print "→ Flashing vendor_boot.img..."
-write_raw_image "$TMPDIR/vendor_boot.img" "/dev/block/bootdevice/by-name/vendor_boot"
-set_progress 0.8
-
-rm -rf "$TMPDIR"
-set_progress 1.0
-
-ui_print " "
-ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-ui_print "  Done! NovaKernel installed successfully."
-ui_print "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-ui_print " "
-FLASH_EOF
-
-    chmod +x "$TC_DIR/NovaKernel/$DEVICE/ZIP/META-INF/com/google/android/update-binary"
-    log_ok "Flash script → update-binary"
+    log_ok "Images Staged"
     log_group_end
 }
 
-# ── 6.8  Image repack ─────────────────────────────────────────────
 gki_repack() {
-    log_group_start "🖼️" "Image Repack  [$(ts)]"
-    local T0=$(date +%s)
+    log_group_start "🖼️" "Image Repack"
     local DEST="$TC_DIR/NovaKernel/$DEVICE/$BUILD_TYPE"
     mkdir -p "$DEST"
 
-    log_step "Repacking boot.img..."
+    # Boot
     cp "$TC_DIR/images/$DEVICE/boot.img" "$DEST/boot.img"
     avbtool erase_footer --image "$DEST/boot.img"
     (
         mkdir -p "$DEST/tmp" && cd "$DEST/tmp"
-        magiskboot unpack ../boot.img
+        magiskboot unpack ../boot.img >/dev/null
         rm kernel && cp "$OUT_DIR/arch/arm64/boot/Image" kernel
-        magiskboot repack ../boot.img boot.img
-        rm ../boot.img && mv boot.img ../boot.img
-        cd .. && rm -rf tmp
+        magiskboot repack ../boot.img boot.img >/dev/null
+        mv boot.img ../boot.img && cd .. && rm -rf tmp
     )
-    log_ok "boot.img repacked"
 
-    log_step "Repacking vendor_boot.img..."
+    # Vendor Boot
     cp "$TC_DIR/images/$DEVICE/vendor_boot.img" "$DEST/vendor_boot.img"
     avbtool erase_footer --image "$DEST/vendor_boot.img"
     (
         mkdir -p "$DEST/tmp" && cd "$DEST/tmp"
-        magiskboot unpack -h ../vendor_boot.img || true
+        magiskboot unpack -h ../vendor_boot.img >/dev/null || true
         sed -Ei 's/(name=SRP[[:alnum:]]*)[0-9]{3}/\1001/' header
-        [[ "${DEBUG:-false}" == "true" ]] && \
-            sed -i '2 s/$/ androidboot.selinux=permissive/' header
+        [[ "${DEBUG:-false}" == "true" ]] && sed -i '2 s/$/ androidboot.selinux=permissive/' header
         rm dtb && cp "$TC_DIR/NovaKernel/$DEVICE/dtb" dtb
-        magiskboot cpio ramdisk.cpio "extract first_stage_ramdisk/fstab.qcom fstab.qcom"
-        awk 'BEGIN{OFS="\t"} /^(system|vendor|product|odm)\s/&&!seen[$1]++ \
-            {rest=$4;for(i=5;i<=NF;i++)rest=rest"\t"$i; \
-            for(i=1;i<=3;i++) print $1,$2,(i==1?"erofs":i==2?"ext4":"f2fs"),rest;next}1' \
-            fstab.qcom > fstab.qcom.new
+        
+        magiskboot cpio ramdisk.cpio "extract first_stage_ramdisk/fstab.qcom fstab.qcom" >/dev/null
+        awk 'BEGIN{OFS="\t"} /^(system|vendor|product|odm)\s/&&!seen[$1]++ {rest=$4;for(i=5;i<=NF;i++)rest=rest"\t"$i; for(i=1;i<=3;i++) print $1,$2,(i==1?"erofs":i==2?"ext4":"f2fs"),rest;next}1' fstab.qcom > fstab.qcom.new
 
-        declare -a cpio_todo=()
-        cpio_todo+=("rm first_stage_ramdisk/fstab.qcom")
-        cpio_todo+=("add 0644 first_stage_ramdisk/fstab.qcom fstab.qcom.new")
-        cpio_todo+=("mkdir 0755 lib/firmware")
-
-        case "$DEVICE" in
-            A73)
-                local fwdir="lib/firmware/tsp_synaptics" srcdir="$SRC_DIR/firmware/tsp_synaptics"
-                cpio_todo+=("mkdir 0755 ${fwdir}")
-                for f in s3908_a73xq_boe.bin s3908_a73xq_csot.bin s3908_a73xq_sdc.bin s3908_a73xq_sdc_4th.bin; do
-                    cpio_todo+=("add 0644 ${fwdir}/${f} ${srcdir}/${f}")
-                done;;
-            A52S)
-                local fwdir="lib/firmware/tsp_stm" srcdir="$SRC_DIR/firmware/tsp_stm"
-                cpio_todo+=("mkdir 0755 ${fwdir}")
-                cpio_todo+=("add 0644 ${fwdir}/fts5cu56a_a52sxq.bin ${srcdir}/fts5cu56a_a52sxq.bin");;
-            M52)
-                local fwdir="lib/firmware/abov" srcdir="$SRC_DIR/firmware/abov"
-                cpio_todo+=("mkdir 0755 ${fwdir}")
-                for f in a96t356_m52xq.bin a96t356_m52xq_sub.bin; do
-                    cpio_todo+=("add 0644 ${fwdir}/${f} ${srcdir}/${f}")
-                done
-                local fwdir2="lib/firmware/tsp_synaptics" srcdir2="$SRC_DIR/firmware/tsp_synaptics"
-                cpio_todo+=("mkdir 0755 ${fwdir2}")
-                for f in s3908_m52xq.bin s3908_m52xq_boe.bin s3908_m52xq_sdc.bin; do
-                    cpio_todo+=("add 0644 ${fwdir2}/${f} ${srcdir2}/${f}")
-                done;;
-        esac
-
-        cpio_todo+=("rm -r lib/modules")
-        cpio_todo+=("mkdir 0755 lib/modules")
-        for f in "$DEST/modules/"*; do
-            cpio_todo+=("add 0644 lib/modules/$(basename "$f") $f")
-        done
-
-        magiskboot cpio ramdisk.cpio "${cpio_todo[@]}"
-        magiskboot repack ../vendor_boot.img vendor_boot.img
-        rm ../vendor_boot.img && mv vendor_boot.img ../vendor_boot.img
-        cd .. && rm -rf tmp
+        declare -a cpio_todo=("rm first_stage_ramdisk/fstab.qcom" "add 0644 first_stage_ramdisk/fstab.qcom fstab.qcom.new" "rm -r lib/modules" "mkdir 0755 lib/modules")
+        for f in "$DEST/modules/"*; do cpio_todo+=("add 0644 lib/modules/$(basename "$f") $f"); done
+        
+        magiskboot cpio ramdisk.cpio "${cpio_todo[@]}" >/dev/null
+        magiskboot repack ../vendor_boot.img vendor_boot.img >/dev/null
+        mv vendor_boot.img ../vendor_boot.img && cd .. && rm -rf tmp
     )
-    log_ok "vendor_boot.img repacked"
-
-    log_ok "All images repacked in $(elapsed $T0)"
+    log_ok "Images repacked successfully"
     log_group_end
 }
 
-# ── 6.9  Package as ZIP ───────────────────────────────────────────
+# ────────────────────────────────────────────────────────────────
+#  § 6 — PACKAGING (التحزيم: AK3 أو عادي)
+# ────────────────────────────────────────────────────────────────
+
+gen_anykernel_zip() {
+    log_group_start "📦" "Packaging with AnyKernel3"
+    local SRC="$TC_DIR/NovaKernel/$DEVICE/$BUILD_TYPE"
+    local AK3_DIR="$TC_DIR/NovaKernel/$DEVICE/AnyKernel3"
+    local ZIP_DIR="$TC_DIR/NovaKernel/$DEVICE/ZIP"
+    
+    local ZIPNAME="NovaKernel_$(date +%Y%m%d)_${BUILD_TYPE}_${VARIANT}_AK3.zip"
+
+    log_step "Cloning AnyKernel3 repo..."
+    rm -rf "$AK3_DIR"
+    git clone --depth=1 -b "$ANYKERNEL3_BRANCH" "$ANYKERNEL3_URL" "$AK3_DIR" >/dev/null 2>&1
+    rm -rf "$AK3_DIR/.git" "$AK3_DIR/README.md"
+
+    log_step "Copying images to AnyKernel3..."
+    cp -a "$SRC/boot.img"        "$AK3_DIR/"
+    cp -a "$SRC/dtbo.img"        "$AK3_DIR/"
+    cp -a "$SRC/vendor_boot.img" "$AK3_DIR/"
+
+    log_step "Compressing AnyKernel3 ZIP..."
+    mkdir -p "$ZIP_DIR"
+    ( cd "$AK3_DIR"; zip -r -9 "$ZIP_DIR/$ZIPNAME" ./* >/dev/null )
+
+    log_notice "AnyKernel3 ZIP Ready: $ZIPNAME"
+    log_group_end
+}
+
 gen_zip() {
-    log_group_start "🤐" "Package  [$(ts)]"
-    local T0=$(date +%s)
+    log_group_start "🤐" "Packaging (Legacy)"
     local SRC="$TC_DIR/NovaKernel/$DEVICE/$BUILD_TYPE"
     local ZIP_DIR="$TC_DIR/NovaKernel/$DEVICE/ZIP"
-    local IMG_DIR="$ZIP_DIR/images"
-
-    wget -q "$URL_BANNER" -O "$ZIP_DIR/banner"
-    cp -a "$SRC/boot.img"        "$IMG_DIR/"
-    cp -a "$SRC/dtbo.img"        "$IMG_DIR/"
-    cp -a "$SRC/vendor_boot.img" "$IMG_DIR/"
-
-    local KSU_VER=""
-    if [[ "$BUILD_TYPE" == "KSU" ]]; then
-        KSU_VER=$(grep -oP -- "-DKSU_VERSION=\K[0-9]+" \
-            "$OUT_DIR/drivers/kernelsu/.ksu.o.cmd" 2>/dev/null | sed 's/^/-/' || true)
-    fi
-
-    local ZIPNAME="NovaKernel_$(date +%Y%m%d)_${BUILD_TYPE}${KSU_VER}_${VARIANT}.zip"
-    local ZIPOUT="$SRC/$ZIPNAME"
-
-    log_step "Creating $ZIPNAME..."
-    ( cd "$ZIP_DIR"; zip -r -9 "$ZIPOUT" images META-INF banner )
-    rm -rf "$IMG_DIR"/* "$ZIP_DIR/META-INF" "$ZIP_DIR/banner"
-
-    local SIZE SHA
-    SIZE=$(du -sh "$ZIPOUT" | cut -f1)
-    SHA=$(sha256sum "$ZIPOUT" | awk '{print $1}')
-
-    log_sep
-    log_kv "📦 Output:"  "$ZIPNAME"
-    log_kv "📏 Size:"    "$SIZE"
-    log_kv "🔑 SHA256:"  "${SHA:0:16}...${SHA: -8}"
-    log_kv "⏱  Time:"   "$(elapsed $T0)"
-    log_sep
-
-    log_notice "ZIP ready → $ZIPNAME  ($SIZE)"
+    
+    cp -a "$SRC/boot.img" "$SRC/dtbo.img" "$SRC/vendor_boot.img" "$ZIP_DIR/images/"
+    local ZIPNAME="NovaKernel_$(date +%Y%m%d)_${BUILD_TYPE}_${VARIANT}.zip"
+    
+    ( cd "$ZIP_DIR"; zip -r -9 "$SRC/$ZIPNAME" images META-INF >/dev/null )
+    log_notice "Legacy ZIP Ready: $ZIPNAME"
     log_group_end
 }
 
-# ─────────────────────────────────────────────────────────────────
-#  § 7 — ENTRY POINT
-# ─────────────────────────────────────────────────────────────────
 
-ENTRY() {
-    if [[ "${1:-}" == "clean" ]]; then
-        log_group_start "🧹" "Clean"
-        rm -rf "$OUT_DIR" "$TC_DIR/NovaKernel"
-        log_ok "Cleaned out/ and NovaKernel artifacts"
-        log_group_end
-        exit 0
+# ────────────────────────────────────────────────────────────────
+#  § 7 — INTERACTIVE & MAIN 
+# ────────────────────────────────────────────────────────────────
+
+prompt_inputs() {
+    [[ "$IN_GHA" == "true" ]] && return
+
+    if [[ -z "${NK_VARIANT:-}" ]]; then
+        echo -e "\n${CYAN}Select target device:${RESET}"
+        echo "  [1] Galaxy A73 5G  (a73xq)"
+        echo "  [2] Galaxy A52s 5G (a52sxq)"
+        echo "  [3] Galaxy M52 5G  (m52xq)"
+        read -rp "→ Choice [1-3]: " choice
+        case "$choice" in 1) NK_VARIANT="a73xq";; 2) NK_VARIANT="a52sxq";; 3) NK_VARIANT="m52xq";; *) log_err "Invalid choice";; esac
     fi
 
-    # ── Phase selector ───────────────────────────────────────────
-    PHASE="all"
-    if [[ "${1:-}" == "--phase" ]]; then
-        PHASE="${2:?'--phase requires: ksu | build | all'}"
-        shift 2
+    if [[ -z "${NK_KSU:-}" ]]; then
+        echo -e "\n${CYAN}Build with KernelSU?${RESET}"
+        read -rp "→ (y/N): " choice
+        [[ "$choice" =~ ^[Yy]$ ]] && NK_KSU="true" || NK_KSU="false"
     fi
 
-    local BUILD_START=$(date +%s)
+    if [[ "$NK_KSU" == "true" && -z "${NK_HOOK_TYPE:-}" ]]; then
+        echo -e "\n${CYAN}Select Hook Type:${RESET}"
+        local i=1; local keys=("kprobes" "scope-min-1.6" "rksu" "syscall" "inline")
+        for k in "${keys[@]}"; do echo "  [$i] $k"; ((i++)); done
+        read -rp "→ Choice: " choice
+        NK_HOOK_TYPE="${keys[$((choice-1))]}"
+    fi
+
+    if [[ -z "${NK_USE_AK3:-}" ]]; then
+        echo -e "\n${CYAN}Package with AnyKernel3? (Recommended)${RESET}"
+        read -rp "→ (Y/n): " choice
+        [[ "$choice" =~ ^[Nn]$ ]] && NK_USE_AK3="false" || NK_USE_AK3="true"
+    fi
+}
+
+main() {
+    if [[ "${1:-}" == "clean" ]]; then rm -rf out/ ~/toolchains/NovaKernel; exit 0; fi
 
     check_dependencies
-    init_vars
 
-    # ── Resolve variant ──────────────────────────────────────────
-    if [[ -n "${1:-}" ]]; then
-        VARIANT="$1"
-    elif [[ -n "${NK_VARIANT:-}" ]]; then
-        VARIANT="$NK_VARIANT"
-    else
-        prompt_variant
-    fi
+    export SRC_DIR="$(pwd)"
+    export OUT_DIR="$SRC_DIR/out"
+    export TC_DIR="$HOME/toolchains"
+    export JOBS=$(nproc)
+    export CLANG_PREBUILT_BIN="$TC_DIR/$CLANGVER/bin/"
+    export PATH="$TC_DIR:$CLANG_PREBUILT_BIN:$PATH"
 
-    [[ ! "$VARIANT" =~ ^(a73xq|a52sxq|m52xq)$ ]] && {
-        log_err "Invalid variant: $VARIANT  (valid: a73xq | a52sxq | m52xq)"
-        exit 1
-    }
+    prompt_inputs
 
-    # ── Resolve KernelSU ─────────────────────────────────────────
-    if [[ -n "${NK_KSU:-}" ]]; then
-        KERNELSU="${NK_KSU}"
-    else
-        prompt_ksu
-    fi
+    export NK_VARIANT="${NK_VARIANT:-a73xq}"
+    export NK_KSU="${NK_KSU:-false}"
+    export USE_ANYKERNEL3="${NK_USE_AK3:-true}"
 
-    if [[ "$KERNELSU" == "true" ]]; then
-        BUILD_TYPE="KSU"
-
-        # KSU branch
-        if [[ -n "${NK_KSU_BRANCH:-}" ]]; then
-            KSU_BRANCH="${NK_KSU_BRANCH}"
-        else
-            prompt_ksu_branch
-        fi
-        [[ -z "${KSU_BRANCH:-}" ]] && KSU_BRANCH="legacy"
-
-        # Hook type
-        if [[ -n "${NK_HOOK_TYPE:-}" ]]; then
-            HOOK_TYPE="${NK_HOOK_TYPE}"
-        else
-            prompt_hook_type
-        fi
-        [[ -z "${HOOK_TYPE:-}" ]] && HOOK_TYPE="kprobes"
-
-        [[ ! "$HOOK_TYPE" =~ ^(kprobes|scope-min-1\.6|rksu|syscall|inline)$ ]] && {
-            log_err "Invalid hook type: $HOOK_TYPE  (valid: kprobes | scope-min-1.6 | rksu | syscall | inline)"
-            exit 1
-        }
-
-        # Backport
-        if [[ -n "${NK_BACKPORT:-}" ]]; then
-            BACKPORT="${NK_BACKPORT}"
-        else
-            prompt_backport
-        fi
-        [[ -z "${BACKPORT:-}" ]] && BACKPORT=false
-
-    else
-        BUILD_TYPE="GKI"
-        HOOK_TYPE="kprobes"
-        BACKPORT=false
-    fi
-
-    export BUILD_TYPE KSU_BRANCH HOOK_TYPE BACKPORT
-
-    # ── Build plan ───────────────────────────────────────────────
-    echo ""
-    echo -e "${CYAN}${BOLD}  ╔══════════════════════════════════════════╗${RESET}"
-    echo -e "${CYAN}${BOLD}  ║       🚀  NovaKernel  Build Plan         ║${RESET}"
-    echo -e "${CYAN}${BOLD}  ╠══════════════════════════════════════════╣${RESET}"
-    echo -e "${CYAN}${BOLD}  ║${RESET}  $(printf '%-12s' "Device:")  ${YELLOW}${BOLD}${VARIANT}${RESET}"
-    echo -e "${CYAN}${BOLD}  ║${RESET}  $(printf '%-12s' "Type:")    ${YELLOW}${BOLD}${BUILD_TYPE}${RESET}"
-    if [[ "$KERNELSU" == "true" ]]; then
-        echo -e "${CYAN}${BOLD}  ║${RESET}  $(printf '%-12s' "KSU Branch:") ${YELLOW}${BOLD}${KSU_BRANCH}${RESET}"
-        echo -e "${CYAN}${BOLD}  ║${RESET}  $(printf '%-12s' "Hook:")       ${YELLOW}${BOLD}${HOOK_TYPE}${RESET}"
-        echo -e "${CYAN}${BOLD}  ║${RESET}  $(printf '%-12s' "Backport:")   ${YELLOW}${BOLD}${BACKPORT}${RESET}"
-    fi
-    echo -e "${CYAN}${BOLD}  ║${RESET}  $(printf '%-12s' "Out:")     ${DIM}${OUT_DIR:-$(pwd)/out}${RESET}"
-    echo -e "${CYAN}${BOLD}  ║${RESET}  $(printf '%-12s' "Started:") ${DIM}$(date '+%Y-%m-%d %H:%M:%S')${RESET}"
-    echo -e "${CYAN}${BOLD}  ╚══════════════════════════════════════════╝${RESET}"
-    echo ""
-
-    # ── Run phases ───────────────────────────────────────────────
     fetch_tools
 
-    if [[ "$PHASE" == "all" || "$PHASE" == "ksu" ]]; then
-        if [[ "$KERNELSU" == "true" ]]; then
-            setup_kernelsu
-            apply_hook
-            [[ "$BACKPORT" == "true" ]] && apply_backport
-        fi
+    if [[ "$NK_KSU" == "true" ]]; then
+        setup_kernelsu
+        apply_hook "${NK_HOOK_TYPE:-kprobes}"
+        [[ "${NK_BACKPORT:-false}" == "true" ]] && apply_backport
     fi
 
-    if [[ "$PHASE" == "all" || "$PHASE" == "build" ]]; then
-        build_kernel "$VARIANT"
-        build_modules
-        stage_artifacts
-        gki_repack
+    build_kernel
+    build_modules
+    stage_artifacts
+    gki_repack
+    
+    if [[ "$USE_ANYKERNEL3" == "true" ]]; then
+        gen_anykernel_zip
+    else
         gen_zip
     fi
 
-    # ── Done ─────────────────────────────────────────────────────
-    local TOTAL
-    TOTAL=$(elapsed $BUILD_START)
-
-    echo ""
-    echo -e "${GREEN}${BOLD}  ╔══════════════════════════════════════════╗${RESET}"
-    echo -e "${GREEN}${BOLD}  ║     ✅  Build Completed Successfully     ║${RESET}"
-    echo -e "${GREEN}${BOLD}  ╠══════════════════════════════════════════╣${RESET}"
-    echo -e "${GREEN}${BOLD}  ║${RESET}  $(printf '%-12s' "Device:")    ${BOLD}${VARIANT}${RESET}"
-    echo -e "${GREEN}${BOLD}  ║${RESET}  $(printf '%-12s' "Type:")      ${BOLD}${BUILD_TYPE}${RESET}"
-    if [[ "$KERNELSU" == "true" ]]; then
-        echo -e "${GREEN}${BOLD}  ║${RESET}  $(printf '%-12s' "Hook:")      ${BOLD}${HOOK_TYPE}${RESET}"
-        echo -e "${GREEN}${BOLD}  ║${RESET}  $(printf '%-12s' "Backport:")  ${BOLD}${BACKPORT}${RESET}"
-    fi
-    echo -e "${GREEN}${BOLD}  ║${RESET}  $(printf '%-12s' "Duration:")  ${BOLD}${TOTAL}${RESET}"
-    echo -e "${GREEN}${BOLD}  ╚══════════════════════════════════════════╝${RESET}"
-    echo -e "${DIM}    @fraxer / @utkustnr — respect the authors' time${RESET}"
-    echo ""
-
-    log_notice "✅ Build complete — $VARIANT [$BUILD_TYPE] hook=$HOOK_TYPE backport=$BACKPORT in $TOTAL"
+    log_notice "✅ Pipeline Finished for ${DEVICE_MAP[$NK_VARIANT]}"
 }
 
-ENTRY "$@"
+main "$@"
