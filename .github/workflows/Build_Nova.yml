@@ -269,7 +269,7 @@ jobs:
           chmod +x buildscript.sh
           ./buildscript.sh --phase ksu
 
-         - name: 🩹 Inject SUSFS 2.1.0 for Kernel 5.4
+      - name: 🩹 Inject SUSFS 2.1.0 for Kernel 5.4
         if: ${{ fromJSON(github.event.inputs.kernelsu) == true }}
         shell: bash
         run: |
