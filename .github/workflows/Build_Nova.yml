@@ -1,4 +1,4 @@
-name: 🔥NovaKernel Kernel Build
+name: 🔥NovaKernel MODIFIED Kernel Build
 
 on:
   workflow_dispatch:
