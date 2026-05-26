@@ -279,7 +279,7 @@ jobs:
           echo "  Injecting SUSFS 2.1.0 patch for Kernel 5.4"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-          SUSFS_PATCH_URL="https://raw.githubusercontent.com/Jack1ltNonG_KernelBuild_/main/Patches/s_patchto_5.4"
+          SUSFS_PATCH_URL="https://raw.githubusercontent.com/Jack1ltNonG_KernelBuild_/NonGKI_Kernel_Build_2nd/mainline/Patches/Patch/susfs_patch_to_5.4.patch"
 
           echo "Downloading SUSFS 5.4 patch..."
           curl -fL --retry 3 --retry-delay 2 -o /tmp/susfs_5.4.patch "$SUSFS_PATCH_URL"
@@ -312,6 +312,11 @@ jobs:
           if ! grep -q 'susfs\.o' fs/Makefile; then
             echo 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' >> fs/Makefile
           fi
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  ✔ SUSFS 2.1.0 injection complete"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+      
 
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "  ✔ SUSFS 2.1.0 injection complete"
