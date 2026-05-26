@@ -269,7 +269,7 @@ jobs:
           chmod +x buildscript.sh
           ./buildscript.sh --phase ksu
 
-      - name: 🩹 Inject SUSFS 2.1.0 for Kernel 5.4
+         - name: 🩹 Inject SUSFS 2.1.0 for Kernel 5.4
         if: ${{ fromJSON(github.event.inputs.kernelsu) == true }}
         shell: bash
         run: |
@@ -282,18 +282,21 @@ jobs:
           SUSFS_PATCH_URL="https://raw.githubusercontent.com/Jack1ltNonG_KernelBuild_/main/Patches/s_patchto_5.4"
 
           echo "Downloading SUSFS 5.4 patch..."
-          curl -LSs "$SUSFS_PATCH_URL" > /tmp/susfs_5.4.patch
+          curl -fL --retry 3 --retry-delay 2 -o /tmp/susfs_5.4.patch "$SUSFS_PATCH_URL"
 
           if [[ ! -s /tmp/susfs_5.4.patch ]]; then
             echo "::error::Downloaded SUSFS patch is empty"
             exit 1
           fi
 
-          echo "Applying SUSFS patch to kernel..."
-          patch -p1 < /tmp/susfs_5.4.patch || {
-            echo "::error::Failed to apply SUSFS 5.4 patch"
+          if ! head -n 5 /tmp/susfs_5.4.patch | grep -Eq '^(diff --git|--- )'; then
+            echo "::error::Downloaded file is not a valid patch"
+            sed -n '1,10p' /tmp/susfs_5.4.patch
             exit 1
-          }
+          fi
+
+          echo "Applying SUSFS patch to kernel..."
+          patch -p1 < /tmp/susfs_5.4.patch
 
           echo "Verifying SUSFS files..."
           test -f fs/susfs.c || { echo "::error::fs/susfs.c not created by patch"; exit 1; }
