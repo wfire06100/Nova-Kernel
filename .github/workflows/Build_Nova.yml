@@ -12,6 +12,7 @@ on:
           - a73xq
           - a52sxq
           - m52xq
+        default: a52sxq
 
       kernelsu:
         description: "Enable KernelSU?"
