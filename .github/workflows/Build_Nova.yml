@@ -279,7 +279,7 @@ jobs:
           echo "  Injecting SUSFS 2.1.0 patch for Kernel 5.4"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-          SUSFS_PATCH_URL="https://raw.githubusercontent.com/https://github.com/JackA1ltman/NonGKI_Kernel_Build_2nd/tree/mainline/Patches/Patch/susfs_patch_to_5.4.patch"
+          SUSFS_PATCH_URL="https://raw.githubusercontent.com/JackA1ltman/NonGKI_Kernel_Build_2nd/refs/heads/mainline/Patches/Patch/susfs_patch_to_5.4.patch"
 
           echo "Downloading SUSFS 5.4 patch..."
           curl -fL --retry 3 --retry-delay 2 -o /tmp/susfs_5.4.patch "$SUSFS_PATCH_URL"
