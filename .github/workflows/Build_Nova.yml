@@ -20,22 +20,19 @@ on:
         default: false
 
       ksu_repo:
-        description: "KernelSU repo URL (overrides NS_KSU_REPO in buildscript)"
+        description: "KernelSU repo URL (overrides NK_KSU_REPO in buildscript)"
         required: false
         default: ""
 
       ksu_branch:
-        description: "KernelSU branch with SUSFS"
+        description: "KernelSU branch"
         required: false
         type: choice
-        default: "legacy-susfs-v2"
+        default: "main"
         options:
           - legacy
           - main
           - next
-          - legacy-susfs-v2  # sidex15 (SUSFS intégré)
-          - legacy_susfs     # rifsxd (SUSFS intégré)
-          - dev-susfs        # pershoot (alternatif)
           - custom
 
       ksu_branch_custom:
@@ -125,7 +122,7 @@ jobs:
           echo "  KSU Branch : ${{ github.event.inputs.ksu_branch }}"
           echo "  Hook       : ${{ github.event.inputs.hook_type }}"
           echo "  Backport   : ${{ github.event.inputs.backport }}"
-          echo "  AK3 Mode   : ${{ github.event.inputs.use_anykernel3 }}"
+          echo "  AK3        : ${{ github.event.inputs.use_anykernel3 }}"
           echo "  Debug      : ${{ github.event.inputs.debug }}"
           echo "  Telegram   : ${{ github.event.inputs.upload_to_telegram }}"
           echo "  Triggered  : ${{ github.actor }}"
@@ -217,61 +214,47 @@ jobs:
             echo "  ℹ Stock images not cached — will download"
           fi
 
-      - name: 🔎 Resolve KernelSU repo & branch
-        id: ksu-resolve
+      - name: 🔎 Resolve KernelSU repo
+        id: ksu-repo
         if: ${{ fromJSON(github.event.inputs.kernelsu) == true }}
         shell: bash
         run: |
-          set -euo pipefail
+          if [[ -n "${{ github.event.inputs.ksu_repo }}" ]]; then
+            echo "repo=${{ github.event.inputs.ksu_repo }}" >> "$GITHUB_OUTPUT"
+          else
+            # Latest KSU-Next official
+            echo "repo=https://github.com/KernelSU-Next/KernelSU-Next.git" >> "$GITHUB_OUTPUT"
+          fi
 
-          BRANCH="${{ github.event.inputs.ksu_branch }}"
-          REPO="${{ github.event.inputs.ksu_repo }}"
-
-          if [[ "${BRANCH}" == "custom" ]]; then
+      - name: 🔎 Resolve KernelSU branch
+        id: ksu-branch
+        if: ${{ fromJSON(github.event.inputs.kernelsu) == true }}
+        shell: bash
+        run: |
+          if [[ "${{ github.event.inputs.ksu_branch }}" == "custom" ]]; then
             if [[ -z "${{ github.event.inputs.ksu_branch_custom }}" ]]; then
               echo "::error::ksu_branch_custom is empty while ksu_branch=custom"
               exit 1
             fi
-            BRANCH="${{ github.event.inputs.ksu_branch_custom }}"
+            echo "branch=${{ github.event.inputs.ksu_branch_custom }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=${{ github.event.inputs.ksu_branch }}" >> "$GITHUB_OUTPUT"
           fi
-
-          # Si l'utilisateur n'a pas forcé un repo, on choisit selon la branche
-          if [[ -z "${REPO}" ]]; then
-            case "${BRANCH}" in
-              legacy_susfs)
-                REPO="https://github.com/rifsxd/KernelSU-Next.git"
-                ;;
-              dev-susfs)
-                REPO="https://github.com/pershoot/KernelSU-Next.git"
-                ;;
-              *)
-                # legacy-susfs-v2, legacy, main, next, custom → sidex15
-                REPO="https://github.com/sidex15/KernelSU-Next.git"
-                ;;
-            esac
-          fi
-
-          echo "repo=${REPO}" >> "$GITHUB_OUTPUT"
-          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
-
-          echo "Resolved KernelSU repo: ${REPO}"
-          echo "Resolved KernelSU branch: ${BRANCH}"
 
       - name: ✅ Validate KernelSU branch exists
         if: ${{ fromJSON(github.event.inputs.kernelsu) == true }}
         shell: bash
         run: |
           set -euo pipefail
+          REPO="${{ steps.ksu-repo.outputs.repo }}"
+          BRANCH="${{ steps.ksu-branch.outputs.branch }}"
 
-          REPO="${{ steps.ksu-resolve.outputs.repo }}"
-          BRANCH="${{ steps.ksu-resolve.outputs.branch }}"
-
-          echo "Checking branch '${BRANCH}' on ${REPO}"
+          echo "Checking branch '$BRANCH' on $REPO"
           if ! git ls-remote --exit-code --heads "$REPO" "$BRANCH" >/dev/null 2>&1; then
-            echo "::error::KernelSU branch '${BRANCH}' not found in ${REPO}"
+            echo "::error::KernelSU branch '$BRANCH' not found in $REPO"
             exit 1
           fi
-          echo "✔ Branch '${BRANCH}' exists in ${REPO}"
+          echo "✔ Branch '$BRANCH' exists in $REPO"
 
       - name: ⚡ KernelSU Setup
         if: ${{ fromJSON(github.event.inputs.kernelsu) == true }}
@@ -279,8 +262,8 @@ jobs:
         env:
           NK_VARIANT:    ${{ matrix.device }}
           NK_KSU:        ${{ github.event.inputs.kernelsu }}
-          NK_KSU_REPO:   ${{ steps.ksu-resolve.outputs.repo }}
-          NK_KSU_BRANCH: ${{ steps.ksu-resolve.outputs.branch }}
+          NK_KSU_REPO:   ${{ steps.ksu-repo.outputs.repo }}
+          NK_KSU_BRANCH: ${{ steps.ksu-branch.outputs.branch }}
           NK_HOOK_TYPE:  ${{ github.event.inputs.hook_type }}
           NK_BACKPORT:   ${{ github.event.inputs.backport }}
         shell: bash
@@ -288,14 +271,55 @@ jobs:
           chmod +x buildscript.sh
           ./buildscript.sh --phase ksu
 
+      - name: 🩹 Inject SUSFS 2.1.0 for Kernel 5.4
+        if: ${{ fromJSON(github.event.inputs.kernelsu) == true }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  Injecting SUSFS 2.1.0 patch for Kernel 5.4"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+          # Download the SUSFS 2.1.0 patch for 5.4 (confirmed working with KSU-NEXT)
+          SUSFS_PATCH_URL="https://raw.githubusercontent.com/Jack1ltNonG_KernelBuild_/main/Patches/s_patchto_5.4"
+
+          echo "Downloading SUSFS 5.4 patch..."
+          curl -LSs "$SUSFS_PATCH_URL" > /tmp/susfs_5.4.patch
+
+          echo "Applying SUSFS patch to kernel..."
+          patch -p1 < /tmp/susfs_5.4.patch || {
+            echo "::error::Failed to apply SUSFS 5.4 patch"
+            exit 1
+          }
+
+          echo "Verifying SUSFS files..."
+          test -f fs/susfs.c || { echo "::error::fs/susfs.c not created by patch"; exit 1; }
+          test -f include/linux/susfs.h || { echo "::error::include/linux/susfs.h not created"; exit 1; }
+
+          echo "Checking symbol definition..."
+          if ! grep -q 'susfs_extra_works' fs/susfs.c; then
+            echo "::error::susfs_extra_works not defined in fs/susfs.c"
+            exit 1
+          fi
+
+          echo "Ensuring fs/Makefile builds susfs.o..."
+          if ! grep -q 'susfs\.o' fs/Makefile; then
+            echo 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' >> fs/Makefile
+          fi
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "  ✔ SUSFS 2.1.0 injection complete"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
       - name: 🔍 SUSFS symbol sanity check
-        if: ${{ fromJSON(github.event.inputs.kernelsu) == true && contains(steps.ksu-resolve.outputs.branch, 'susfs') }}
+        if: ${{ fromJSON(github.event.inputs.kernelsu) == true }}
         shell: bash
         run: |
           set -euo pipefail
 
           echo "Checking SUSFS symbol references..."
-          grep -Rns "susfs_extra_works" . || true
+          grep -Rsn "susfs_extra_works" . || true
 
           if grep -Rqs "susfs_extra_works" KernelSU drivers 2>/dev/null; then
             echo "KernelSU side references susfs_extra_works"
@@ -306,7 +330,8 @@ jobs:
           if grep -Rqs "susfs_extra_works" fs include 2>/dev/null; then
             echo "Kernel source provides susfs_extra_works"
           else
-            echo "::warning::No susfs_extra_works provider found in fs/ or include/"
+            echo "::error::No susfs_extra_works provider found in fs/ or include/"
+            exit 1
           fi
 
       - name: 🔨 Build kernel
@@ -314,8 +339,8 @@ jobs:
         env:
           NK_VARIANT:        ${{ matrix.device }}
           NK_KSU:            ${{ github.event.inputs.kernelsu }}
-          NK_KSU_REPO:       ${{ steps.ksu-resolve.outputs.repo }}
-          NK_KSU_BRANCH:     ${{ steps.ksu-resolve.outputs.branch }}
+          NK_KSU_REPO:       ${{ steps.ksu-repo.outputs.repo }}
+          NK_KSU_BRANCH:     ${{ steps.ksu-branch.outputs.branch }}
           NK_HOOK_TYPE:      ${{ github.event.inputs.hook_type }}
           NK_BACKPORT:       ${{ github.event.inputs.backport }}
           USE_ANYKERNEL3:    ${{ github.event.inputs.use_anykernel3 }}
@@ -375,7 +400,7 @@ jobs:
         if: ${{ success() && github.event.inputs.upload_to_telegram == 'true' && steps.find-zip.outputs.zip_path != '' }}
         env:
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
-          TG_CHAT_ID:   ${{ secrets.TG_BOT_ID }}
+          TG_CHAT_ID:   ${{ secrets.TG_CHAT_ID }}
           CHANGELOG:    ${{ github.event.inputs.changelog }}
         shell: bash
         run: |
