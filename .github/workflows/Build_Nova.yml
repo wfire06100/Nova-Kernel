@@ -18,7 +18,7 @@ on:
         description: "Enable KernelSU?"
         required: true
         type: boolean
-        default: false
+        default: true
 
       ksu_repo:
         description: "KernelSU repo URL (overrides NK_KSU_REPO in buildscript)"
