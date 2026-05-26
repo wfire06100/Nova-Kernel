@@ -240,17 +240,24 @@ jobs:
       - name: 📦 Inject matching SUSFS sources
         if: ${{ fromJSON(github.event.inputs.kernelsu) == true && contains(github.event.inputs.ksu_branch, 'susfs') }}
         shell: bash
+        env:
+          SUSFS_REPO: https://gitlab.com/simonpunk/susfs4ksu.git
+          SUSFS_BRANCH: gki-android13-5.10
         run: |
           set -euo pipefail
 
           rm -rf /tmp/susfs4ksu
-          git clone --depth=1 -b gki-android12-5.10 https://github.com/Star-Seven/susfs4ksu /tmp/susfs4ksu
+          git clone --depth=1 -b "$SUSFS_BRANCH" "$SUSFS_REPO" /tmp/susfs4ksu
 
           cp -rv /tmp/susfs4ksu/kernel_patches/fs/* fs/
           cp -rv /tmp/susfs4ksu/kernel_patches/include/linux/* include/linux/
 
+          if [ -f /tmp/susfs4ksu/kernel_patches/50_add_susfs_in_kernel-android13-5.10.patch ]; then
+            patch -p1 --forward < /tmp/susfs4ksu/kernel_patches/50_add_susfs_in_kernel-android13-5.10.patch || true
+          fi
+
           if [ -f /tmp/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ]; then
-            patch -p1 --forward < /tmp/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch || true
+            (cd KernelSU && patch -p1 --forward < /tmp/susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch) || true
           fi
 
       # ───────── Build phase ─────────
