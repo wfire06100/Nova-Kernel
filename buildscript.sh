@@ -348,35 +348,27 @@ fetch_tools() {
         log_ok "magiskboot — cached ✓"
     fi
 
-    if [[ ! -f "$TC_DIR/avbtool" ]]; then
-        log_step "Fetching avbtool..."
-logstep Fetching avbtool...
+if ! [ -f "$TCDIR/avbtool" ]; then
+    logstep "Fetching avbtool..."
+    local AVB_URL="https://android.googlesource.com/platform/external/avb/+/refs/heads/main/avbtool.py?format=TEXT"
+    local TMP_AVB
+    TMP_AVB="$(mktemp)"
 
-AVB_URL="https://android.googlesource.com/platform/external/avb/+/refs/heads/main/avbtool?format=TEXT"
-TMP_AVB="$(mktemp)"
+    curl -fLsS "$AVB_URL" -o "$TMP_AVB"
 
-curl -fLsS "$AVB_URL" -o "$TMP_AVB"
-
-if [[ ! -s "$TMP_AVB" ]]; then
-  logerr "avbtool download is empty"
-  exit 1
-fi
-
-if ! head -c 80 "$TMP_AVB" | grep -Eq '^[A-Za-z0-9+/=[:space:]]+$'; then
-  logerr "avbtool response is not valid base64"
-  sed -n '1,5p' "$TMP_AVB"
-  exit 1
-fi
-
-base64 -d -i "$TMP_AVB" > "$TCDIR/avbtool"
-chmod +x "$TCDIR/avbtool"
-rm -f "$TMP_AVB"
-
-logok avbtool ready
-        log_ok "avbtool ready"
-    else
-        log_ok "avbtool — cached ✓"
+    if [[ ! -s "$TMP_AVB" ]]; then
+        rm -f "$TMP_AVB"
+        logerr "avbtool download is empty"
+        exit 1
     fi
+
+    base64 -d -i "$TMP_AVB" > "$TCDIR/avbtool"
+    chmod +x "$TCDIR/avbtool"
+    rm -f "$TMP_AVB"
+    logok "avbtool ready"
+else
+    logok "avbtool cached"
+fi
 
     if [[ ! -d "$TC_DIR/images" ]]; then
         log_step "Downloading stock kernel images..."
