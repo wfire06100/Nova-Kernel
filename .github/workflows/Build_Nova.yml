@@ -28,11 +28,10 @@ on:
         description: "KernelSU branch"
         required: false
         type: choice
-        default: "main"
+        default: "dev"
         options:
           - legacy
-          - main
-          - next
+          - dev
           - custom
 
       ksu_branch_custom:
@@ -222,7 +221,6 @@ jobs:
           if [[ -n "${{ github.event.inputs.ksu_repo }}" ]]; then
             echo "repo=${{ github.event.inputs.ksu_repo }}" >> "$GITHUB_OUTPUT"
           else
-            # Latest KSU-Next official
             echo "repo=https://github.com/KernelSU-Next/KernelSU-Next.git" >> "$GITHUB_OUTPUT"
           fi
 
@@ -281,11 +279,15 @@ jobs:
           echo "  Injecting SUSFS 2.1.0 patch for Kernel 5.4"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-          # Download the SUSFS 2.1.0 patch for 5.4 (confirmed working with KSU-NEXT)
           SUSFS_PATCH_URL="https://raw.githubusercontent.com/Jack1ltNonG_KernelBuild_/main/Patches/s_patchto_5.4"
 
           echo "Downloading SUSFS 5.4 patch..."
           curl -LSs "$SUSFS_PATCH_URL" > /tmp/susfs_5.4.patch
+
+          if [[ ! -s /tmp/susfs_5.4.patch ]]; then
+            echo "::error::Downloaded SUSFS patch is empty"
+            exit 1
+          fi
 
           echo "Applying SUSFS patch to kernel..."
           patch -p1 < /tmp/susfs_5.4.patch || {
