@@ -350,21 +350,9 @@ fetch_tools() {
 
     if [[ ! -f "$TC_DIR/avbtool" ]]; then
         log_step "Fetching avbtool..."
-        local AVB_URL="https://android.googlesource.com/platform/external/avb/+/refs/heads/main/avbtool?format=TEXT"
-        local TMP_AVB
-        TMP_AVB="$(mktemp)"
-
-        curl -fLsS "$AVB_URL" -o "$TMP_AVB"
-
-        if [[ ! -s "$TMP_AVB" ]]; then
-            rm -f "$TMP_AVB"
-            log_err "avbtool download is empty"
-            exit 1
-        fi
-
-        base64 -d -i "$TMP_AVB" > "$TC_DIR/avbtool"
+        curl -s "https://android.googlesource.com/platform/external/avb/+/refs/heads/main/avbtool.py?format=TEXT" \
+            | base64 --decode > "$TC_DIR/avbtool"
         chmod +x "$TC_DIR/avbtool"
-        rm -f "$TMP_AVB"
         log_ok "avbtool ready"
     else
         log_ok "avbtool — cached ✓"
