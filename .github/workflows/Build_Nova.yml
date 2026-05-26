@@ -333,28 +333,23 @@ jobs:
           echo "  ✔ SUSFS 2.1.0 step complete"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-      - name: 🔍 SUSFS symbol sanity check
+      - name: 🔍 SUSFS sanity check
         if: ${{ fromJSON(github.event.inputs.kernelsu) == true }}
         shell: bash
         run: |
           set -euo pipefail
 
-          echo "Checking SUSFS symbol references..."
-          grep -Rsn "susfs_extra_works" . || true
+          test -f fs/susfs.c || { echo "::error::fs/susfs.c missing"; exit 1; }
+          test -f include/linux/susfs.h || { echo "::error::include/linux/susfs.h missing"; exit 1; }
+          test -f include/linux/susfs_def.h || { echo "::error::include/linux/susfs_def.h missing"; exit 1; }
 
-          if grep -Rqs "susfs_extra_works" KernelSU drivers 2>/dev/null; then
-            echo "KernelSU side references susfs_extra_works"
-          else
-            echo "No KernelSU-side reference to susfs_extra_works found"
-          fi
-
-          if grep -Rqs "susfs_extra_works" fs include 2>/dev/null; then
-            echo "Kernel source provides susfs_extra_works"
-          else
-            echo "::error::No susfs_extra_works provider found in fs/ or include/"
+          if ! grep -q 'susfs\.o' fs/Makefile; then
+            echo "::error::fs/Makefile does not build susfs.o"
             exit 1
           fi
 
+          echo "SUSFS core files and build integration present"
+          
       - name: 🔨 Build kernel
         timeout-minutes: 60
         env:
