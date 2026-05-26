@@ -73,7 +73,7 @@ on:
         description: "Upload build to Telegram?"
         required: true
         type: boolean
-        default: true
+        default: false
 
       release_type:
         description: "Release type"
@@ -256,7 +256,7 @@ jobs:
 
       - name: ⚡ KernelSU Setup
         if: ${{ fromJSON(github.event.inputs.kernelsu) == true }}
-        timeout-minutes: 15
+        timeout-minutes: 30
         env:
           NK_VARIANT:    ${{ matrix.device }}
           NK_KSU:        ${{ github.event.inputs.kernelsu }}
